@@ -1,4 +1,4 @@
-const API_BASE = "http://localhost:4000"
+const API_BASE = "https://arcinvisiblewallet.vercel.app"
 
 function handleResponse(res) {
   return res.text().then((text) => {
