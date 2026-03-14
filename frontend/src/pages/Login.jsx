@@ -9,6 +9,7 @@ export default function Login() {
   const [error, setError] = useState("")
   const [backendHealthy, setBackendHealthy] = useState(null)
   const [backendError, setBackendError] = useState("")
+  const [checkingBackend, setCheckingBackend] = useState(false)
   const [showInstructions, setShowInstructions] = useState(false)
   const navigate = useNavigate()
 
@@ -20,13 +21,18 @@ export default function Login() {
   }, [navigate])
 
   async function checkBackend() {
+    setCheckingBackend(true)
     try {
       await checkHealth()
       setBackendHealthy(true)
       setBackendError("")
+      return true
     } catch (err) {
       setBackendHealthy(false)
-      setBackendError(err.message)
+      setBackendError(err.message || "Failed to reach backend")
+      return false
+    } finally {
+      setCheckingBackend(false)
     }
   }
 
@@ -37,6 +43,12 @@ export default function Login() {
   async function handleLogin() {
     setLoading(true)
     setError("")
+
+    const healthy = await checkBackend()
+    if (!healthy) {
+      setLoading(false)
+      return
+    }
 
     try {
       const data = await backendLogin(email)
@@ -68,6 +80,15 @@ export default function Login() {
             <div className="mt-2 text-xs text-red-600">
               {backendError}
             </div>
+          )}
+          {backendHealthy === false && (
+            <button
+              onClick={checkBackend}
+              disabled={checkingBackend}
+              className="mt-2 text-xs px-3 py-1 rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200"
+            >
+              {checkingBackend ? "Retrying…" : "Retry connection"}
+            </button>
           )}
         </div>
 
