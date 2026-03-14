@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
-import { login as backendLogin } from "../lib/api"
+import { checkHealth, login as backendLogin } from "../lib/api"
 import RestoreInstructionsModal from "../components/RestoreInstructionsModal"
 
 export default function Login() {
   const [email, setEmail] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
+  const [backendHealthy, setBackendHealthy] = useState(null)
   const [showInstructions, setShowInstructions] = useState(false)
   const navigate = useNavigate()
 
@@ -16,6 +17,19 @@ export default function Login() {
       navigate("/dashboard")
     }
   }, [navigate])
+
+  useEffect(() => {
+    async function checkBackend() {
+      try {
+        await checkHealth()
+        setBackendHealthy(true)
+      } catch {
+        setBackendHealthy(false)
+      }
+    }
+
+    checkBackend()
+  }, [])
 
   async function handleLogin() {
     setLoading(true)
@@ -35,9 +49,19 @@ export default function Login() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="bg-white p-8 rounded-2xl shadow max-w-sm w-full">
-        <h1 className="text-2xl font-bold text-center mb-6 text-blue-600">
-          Invisible Wallet Login
-        </h1>
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-2xl font-bold text-blue-600">Invisible Wallet Login</h1>
+          {backendHealthy === true && (
+            <span className="text-xs px-2 py-1 rounded-full bg-green-100 text-green-700">
+              Backend online
+            </span>
+          )}
+          {backendHealthy === false && (
+            <span className="text-xs px-2 py-1 rounded-full bg-red-100 text-red-700">
+              Backend offline
+            </span>
+          )}
+        </div>
 
         <input
           type="email"

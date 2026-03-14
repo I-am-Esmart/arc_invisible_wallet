@@ -56,6 +56,11 @@ export async function createWallet() {
   return handleResponse(res)
 }
 
+export async function checkHealth() {
+  const res = await fetch(`${API_BASE}/health`)
+  return handleResponse(res)
+}
+
 export async function getBalance(address) {
   const res = await fetch(`${API_BASE}/get-balance`, {
     method: "POST",

@@ -38,7 +38,7 @@ function loadStore() {
   try {
     ensureDataDir()
     if (!fs.existsSync(STORE_FILE)) {
-      fs.writeFileSync(STORE_FILE, JSON.stringify({ users: {}, wallets: {} }, null, 2))
+      fs.writeFileSync(STORE_FILE, JSON.stringify({ users: {}, wallets: {}, txs: [] }, null, 2))
     }
     const raw = fs.readFileSync(STORE_FILE, "utf-8")
     return JSON.parse(raw)
@@ -48,7 +48,8 @@ function loadStore() {
   }
 }
 
-function saveStore(store) {
+function saveStore(
+  store) {
   try {
     ensureDataDir()
     fs.writeFileSync(STORE_FILE, JSON.stringify(store, null, 2))
@@ -60,6 +61,16 @@ function saveStore(store) {
 const store = loadStore()
 const walletStore = new Map(Object.entries(store.wallets))
 const userStore = new Map(Object.entries(store.users))
+
+function getTxs() {
+  return Array.isArray(store.txs) ? store.txs : []
+}
+
+function addTx(tx) {
+  if (!Array.isArray(store.txs)) store.txs = []
+  store.txs.push(tx)
+  saveStore(store)
+}
 
 function persist() {
   store.wallets = Object.fromEntries(walletStore.entries())
@@ -89,6 +100,14 @@ async function getEthBalance(address) {
     return "0"
   }
 }
+
+/* --------------------------------------------------
+   HEALTH CHECK
+-------------------------------------------------- */
+
+app.get("/health", (req, res) => {
+  res.json({ ok: true, uptime: process.uptime() })
+})
 
 /* --------------------------------------------------
    AUTH / USER WALLET ENDPOINTS
@@ -202,20 +221,12 @@ app.get("/balance", async (req, res) => {
 app.get("/txs", async (req, res) => {
   try {
     const { address } = req.query
-    const target = address || realWallet.address
+    const txs = getTxs().filter((tx) => {
+      if (!address) return true
+      return tx.from.toLowerCase() === address.toLowerCase() || tx.to.toLowerCase() === address.toLowerCase()
+    })
 
-    const history = await provider.getHistory(target)
-
-    const txs = history.map((tx) => ({
-      hash: tx.hash,
-      from: tx.from,
-      to: tx.to,
-      amount: ethers.formatEther(tx.value),
-      status: tx.confirmations >= 1 ? "confirmed" : "pending",
-      timestamp: tx.timestamp ? tx.timestamp * 1000 : Date.now(),
-    }))
-
-    res.json({ address: target, txs })
+    res.json({ address: address || null, txs })
   } catch (err) {
     console.error(err)
     res.status(500).json({ error: err.message })
@@ -243,13 +254,24 @@ app.post("/send-transaction", async (req, res) => {
       }
     }
 
-    const accountBalance = await signer.getBalance()
+    const signerAddress = await signer.getAddress()
+    const accountBalance = await provider.getBalance(signerAddress)
     if (accountBalance.lt(value)) {
       return res.status(400).json({ error: "Insufficient balance" })
     }
 
     const tx = await signer.sendTransaction({ to, value })
     await tx.wait()
+
+    const txRecord = {
+      hash: tx.hash,
+      from: signerAddress,
+      to,
+      amount: amount.toString(),
+      status: "confirmed",
+      timestamp: Date.now(),
+    }
+    addTx(txRecord)
 
     res.json({
       status: "ok",
@@ -331,4 +353,9 @@ async function testConnection() {
 
 testConnection()
 
-app.listen(4000, () => console.log("🚀 Backend running → http://localhost:4000"))
+if (!process.env.VERCEL) {
+  // Only listen when running locally
+  app.listen(4000, () => console.log("🚀 Backend running → http://localhost:4000"))
+}
+
+module.exports = app
