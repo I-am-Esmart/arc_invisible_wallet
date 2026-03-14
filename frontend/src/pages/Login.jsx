@@ -8,6 +8,7 @@ export default function Login() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [backendHealthy, setBackendHealthy] = useState(null)
+  const [backendError, setBackendError] = useState("")
   const [showInstructions, setShowInstructions] = useState(false)
   const navigate = useNavigate()
 
@@ -18,16 +19,18 @@ export default function Login() {
     }
   }, [navigate])
 
-  useEffect(() => {
-    async function checkBackend() {
-      try {
-        await checkHealth()
-        setBackendHealthy(true)
-      } catch {
-        setBackendHealthy(false)
-      }
+  async function checkBackend() {
+    try {
+      await checkHealth()
+      setBackendHealthy(true)
+      setBackendError("")
+    } catch (err) {
+      setBackendHealthy(false)
+      setBackendError(err.message)
     }
+  }
 
+  useEffect(() => {
     checkBackend()
   }, [])
 
@@ -60,6 +63,11 @@ export default function Login() {
             <span className="text-xs px-2 py-1 rounded-full bg-red-100 text-red-700">
               Backend offline
             </span>
+          )}
+          {backendError && (
+            <div className="mt-2 text-xs text-red-600">
+              {backendError}
+            </div>
           )}
         </div>
 
@@ -98,6 +106,17 @@ export default function Login() {
             How it works
           </button>
         </div>
+
+        {backendHealthy === false && (
+          <div className="mt-4 text-sm text-gray-600">
+            <button
+              onClick={checkBackend}
+              className="px-3 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200"
+            >
+              Retry connection
+            </button>
+          </div>
+        )}
       </div>
 
       <RestoreInstructionsModal
