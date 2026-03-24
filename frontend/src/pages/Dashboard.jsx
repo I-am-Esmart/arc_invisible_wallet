@@ -73,10 +73,11 @@ export default function Dashboard() {
         <div className="font-mono text-sm break-all mb-4">
           {user.address}
         </div>
+        
 
-        <div className="text-sm text-gray-500 mb-1">Balance</div>
+        <div className="text-sm text-gray-500 mb-1 mt-4">Balance</div>
         <div className="text-3xl font-bold">
-          {wallet.balance} {wallet.symbol}
+          {wallet.balance} {wallet.symbol || 'USDC'}
         </div>
       </div>
 

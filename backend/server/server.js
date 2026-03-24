@@ -1,361 +1,162 @@
-const express = require("express")
-const cors = require("cors")
-require("dotenv").config()
-const { ethers } = require("ethers")
-const fs = require("fs")
-const path = require("path")
+const express = require("express");
+const cors = require("cors");
+require("dotenv").config();
+const { ethers } = require("ethers");
 
-const app = express()
-app.use(cors())
-app.use(express.json())
+
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+app.use(cors({
+  origin: "http://localhost:5173", // Match your Vite port
+  methods: ["GET", "POST"],
+  credentials: true
+}))
+
+// 1. ARC TESTNET SETTINGS (Chain ID: 5042002)
+const provider = new ethers.JsonRpcProvider(process.env.ARC_RPC || "https://rpc.testnet.arc.network");
 
 /* --------------------------------------------------
-   PROVIDER + RELAYER WALLET
+   DETERMINISTIC WALLET DERIVATION
 -------------------------------------------------- */
-
-if (!process.env.SEPOLIA_RPC || !process.env.SEPOLIA_PRIVATE_KEY) {
-  console.error("Missing required env vars: SEPOLIA_RPC and SEPOLIA_PRIVATE_KEY")
-  process.exit(1)
-}
-
-const provider = new ethers.JsonRpcProvider(process.env.SEPOLIA_RPC)
-const realWallet = new ethers.Wallet(process.env.SEPOLIA_PRIVATE_KEY, provider)
-
-/* --------------------------------------------------
-   PERSISTED USER/ARC WALLET STORE (demo)
--------------------------------------------------- */
-
-const DATA_DIR = path.join(__dirname, "data")
-const STORE_FILE = path.join(DATA_DIR, "store.json")
-
-function ensureDataDir() {
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true })
-  }
-}
-
-function loadStore() {
-  try {
-    ensureDataDir()
-    if (!fs.existsSync(STORE_FILE)) {
-      fs.writeFileSync(STORE_FILE, JSON.stringify({ users: {}, wallets: {}, txs: [] }, null, 2))
-    }
-    const raw = fs.readFileSync(STORE_FILE, "utf-8")
-    return JSON.parse(raw)
-  } catch (err) {
-    console.warn("Failed to load store, starting fresh:", err.message)
-    return { users: {}, wallets: {} }
-  }
-}
-
-function saveStore(
-  store) {
-  try {
-    ensureDataDir()
-    fs.writeFileSync(STORE_FILE, JSON.stringify(store, null, 2))
-  } catch (err) {
-    console.warn("Failed to persist store:", err.message)
-  }
-}
-
-const store = loadStore()
-const walletStore = new Map(Object.entries(store.wallets))
-const userStore = new Map(Object.entries(store.users))
-
-function getTxs() {
-  return Array.isArray(store.txs) ? store.txs : []
-}
-
-function addTx(tx) {
-  if (!Array.isArray(store.txs)) store.txs = []
-  store.txs.push(tx)
-  saveStore(store)
-}
-
-function persist() {
-  store.wallets = Object.fromEntries(walletStore.entries())
-  store.users = Object.fromEntries(userStore.entries())
-  saveStore(store)
-}
-
-function makeArcKeyId() {
-  return `arc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-}
-
-function toUserPayload(item) {
-  return {
-    email: item.email,
-    address: item.address,
-    arcKeyId: item.arcKeyId,
-  }
-}
-
-async function getEthBalance(address) {
-  try {
-    const raw = await provider.getBalance(address)
-    return ethers.formatEther(raw)
-  } catch (err) {
-    console.warn("Unable to fetch balance (RPC may be unreachable):", err.message)
-    // Fallback to 0 when RPC lookup fails (helps keep the UI from crashing)
-    return "0"
-  }
+function walletFromEmail(email) {
+  const hash = ethers.keccak256(ethers.toUtf8Bytes(email || "default"));
+  const arcKeyId = `arc-${hash.slice(2, 12)}`;
+  const privateKey = ethers.keccak256(ethers.toUtf8Bytes(arcKeyId));
+  return { 
+    signer: new ethers.Wallet(privateKey, provider),
+    arcKeyId 
+  };
 }
 
 /* --------------------------------------------------
-   HEALTH CHECK
+   ENDPOINTS
 -------------------------------------------------- */
 
 app.get("/health", (req, res) => {
-  res.json({ ok: true, uptime: process.uptime() })
-})
-
-/* --------------------------------------------------
-   AUTH / USER WALLET ENDPOINTS
--------------------------------------------------- */
+  res.json({ status: "ok", message: "Arc Wallet Backend is running" });
+});
 
 app.post("/auth/login", async (req, res) => {
-  const { email } = req.body
-  if (!email) {
-    return res.status(400).json({ error: "Email is required" })
-  }
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: "Email required" });
 
-  let arcKeyId = userStore.get(email)
+    const { signer, arcKeyId } = walletFromEmail(email);
+    
+    // FORCE FETCH FROM ARC RPC
+    const rawBalance = await provider.getBalance(signer.address);
+    // Arc native token uses 18 decimals (like ETH), not 6
+    const balance = ethers.formatUnits(rawBalance, 18); 
 
-  if (!arcKeyId || !walletStore.has(arcKeyId)) {
-    const wallet = ethers.Wallet.createRandom()
-    arcKeyId = makeArcKeyId()
+    console.log(`User Logged In: ${signer.address} | Balance: ${balance} USDC`);
 
-    walletStore.set(arcKeyId, {
+    res.json({
       email,
+      address: signer.address,
       arcKeyId,
-      address: wallet.address,
-      privateKey: wallet.privateKey,
-    })
-    userStore.set(email, arcKeyId)
-    persist()
-  }
-
-  const walletData = walletStore.get(arcKeyId)
-
-  const balance = await getEthBalance(walletData.address)
-
-  res.json({
-    ...toUserPayload(walletData),
-    balance,
-    symbol: "ETH",
-    network: "sepolia",
-  })
-})
-
-app.post("/create-wallet", async (req, res) => {
-  const wallet = ethers.Wallet.createRandom()
-  const arcKeyId = makeArcKeyId()
-
-  walletStore.set(arcKeyId, {
-    email: null,
-    arcKeyId,
-    address: wallet.address,
-    privateKey: wallet.privateKey,
-  })
-  persist()
-
-  res.json({
-    address: wallet.address,
-    privateKey: wallet.privateKey,
-    arcKeyId,
-  })
-})
-
-app.post("/get-balance", async (req, res) => {
-  try {
-    const { address } = req.body
-    if (!address) return res.status(400).json({ error: "Missing address" })
-    const balance = await getEthBalance(address)
-    res.json({ address, balance, symbol: "ETH", network: "sepolia" })
+      balance,
+      symbol: "USDC",
+      network: "arc-testnet"
+    });
   } catch (err) {
-    console.error(err)
-    res.status(500).json({ error: err.message })
+    console.error(err);
+    res.status(500).json({ error: err.message });
   }
-})
-
-app.post("/sign-message", async (req, res) => {
-  try {
-    const { message, arcKeyId } = req.body
-    if (!message) return res.status(400).json({ error: "Missing message" })
-    if (!arcKeyId) return res.status(400).json({ error: "Missing arcKeyId" })
-
-    const userWallet = walletStore.get(arcKeyId)
-    if (!userWallet) return res.status(404).json({ error: "Arc key not found" })
-
-    const signer = new ethers.Wallet(userWallet.privateKey)
-    const signature = await signer.signMessage(message)
-
-    res.json({ signature, signedBy: userWallet.address })
-  } catch (err) {
-    console.error(err)
-    res.status(500).json({ error: err.message })
-  }
-})
-
-/* --------------------------------------------------
-   BALANCE / TRANSACTION ENDPOINTS
--------------------------------------------------- */
+});
 
 app.get("/balance", async (req, res) => {
   try {
-    const { address } = req.query
-    const targetAddress = address || realWallet.address
-    const balance = await getEthBalance(targetAddress)
-    res.json({
-      address: targetAddress,
-      balance,
-      symbol: "ETH",
-      network: "sepolia",
-    })
+    const { address } = req.query;
+    if (!address) return res.status(400).json({ error: "Address required" });
+
+    const raw = await provider.getBalance(address);
+    const balance = ethers.formatUnits(raw, 18);
+    
+    res.json({ balance, symbol: "USDC", address });
   } catch (err) {
-    console.error(err)
-    res.status(500).json({ error: err.message })
+    console.error(err);
+    res.status(500).json({ error: err.message });
   }
-})
+});
 
 app.get("/txs", async (req, res) => {
   try {
-    const { address } = req.query
-    const txs = getTxs().filter((tx) => {
-      if (!address) return true
-      return tx.from.toLowerCase() === address.toLowerCase() || tx.to.toLowerCase() === address.toLowerCase()
-    })
+    const { address } = req.query;
+    if (!address) return res.status(400).json({ error: "Address required" });
 
-    res.json({ address: address || null, txs })
+    // Arc testnet doesn't have a simple way to fetch tx history from RPC
+    // Return empty array - frontend uses localStorage for tx history
+    res.json({ txs: [], address });
   } catch (err) {
-    console.error(err)
-    res.status(500).json({ error: err.message })
+    console.error(err);
+    res.status(500).json({ error: err.message });
   }
-})
+});
 
 app.post("/send-transaction", async (req, res) => {
   try {
-    const { to, amount, fromAddress, arcKeyId } = req.body
-
-    if (!to || !amount) {
-      return res.status(400).json({ error: "'to' and 'amount' are required" })
+    const { to, amount, email } = req.body;
+    
+    if (!to || !amount || !email) {
+      return res.status(400).json({ 
+        error: "Missing required fields: to, amount, email" 
+      });
     }
 
-    const value = ethers.parseEther(amount.toString())
-    let signer = realWallet
+    // Resolve signer from email
+    const { signer } = walletFromEmail(email);
+    const signerAddress = await signer.getAddress();
 
-    if (arcKeyId && walletStore.has(arcKeyId)) {
-      const userWallet = walletStore.get(arcKeyId)
-      signer = new ethers.Wallet(userWallet.privateKey, provider)
-    } else if (fromAddress) {
-      const found = [...walletStore.values()].find((w) => w.address.toLowerCase() === fromAddress.toLowerCase())
-      if (found) {
-        signer = new ethers.Wallet(found.privateKey, provider)
-      }
+    // Validate recipient address
+    if (!ethers.isAddress(to)) {
+      return res.status(400).json({ error: "Invalid recipient address" });
     }
 
-    const signerAddress = await signer.getAddress()
-    const accountBalance = await provider.getBalance(signerAddress)
-    if (accountBalance.lt(value)) {
-      return res.status(400).json({ error: "Insufficient balance" })
+    // Arc uses 18 decimals for native token
+    const value = ethers.parseUnits(amount.toString(), 18);
+    
+    // Get current gas price from Arc
+    const feeData = await provider.getFeeData();
+    const gasPrice = feeData.gasPrice;
+    const gasLimit = BigInt(21000);
+    const totalNeeded = value + (gasLimit * gasPrice);
+
+    const balanceRaw = await provider.getBalance(signerAddress);
+
+    if (balanceRaw < totalNeeded) {
+      return res.status(400).json({
+        error: `Insufficient USDC. Have ${ethers.formatUnits(balanceRaw, 18)} USDC, need ~${ethers.formatUnits(totalNeeded, 18)} USDC.`
+      });
     }
 
-    const tx = await signer.sendTransaction({ to, value })
-    await tx.wait()
+    console.log(`Sending ${amount} USDC from ${signerAddress} to ${to}`);
 
-    const txRecord = {
+    const tx = await signer.sendTransaction({
+      to,
+      value,
+      gasLimit,
+      gasPrice
+    });
+
+    console.log(`Transaction sent: ${tx.hash}`);
+    const receipt = await tx.wait();
+    
+    res.json({ 
+      status: "ok", 
       hash: tx.hash,
       from: signerAddress,
       to,
-      amount: amount.toString(),
-      status: "confirmed",
-      timestamp: Date.now(),
-    }
-    addTx(txRecord)
+      amount,
+      receipt: receipt ? receipt.blockNumber : null
+    });
 
-    res.json({
-      status: "ok",
-      hash: tx.hash,
-      explorer: `https://sepolia.etherscan.io/tx/${tx.hash}`,
-    })
   } catch (err) {
-    console.error("SEND TRANSACTION ERROR:", err)
-    res.status(500).json({ error: err.message })
+    console.error("Send transaction error:", err);
+    res.status(500).json({ error: err.message });
   }
-})
+});
 
-/* --------------------------------------------------
-   USDC SETUP (Sepolia)
--------------------------------------------------- */
-
-const USDC_ADDRESS = "0x1c7d4b196cb0c7b01d743fbc6116a902379c7238"
-const ERC20_ABI = [
-  "function balanceOf(address owner) view returns (uint256)",
-  "function transfer(address to, uint amount) returns (bool)",
-  "function decimals() view returns (uint8)"
-]
-const usdcContract = new ethers.Contract(USDC_ADDRESS, ERC20_ABI, realWallet)
-
-app.get("/usdc-balance", async (req, res) => {
-  try {
-    const balance = await usdcContract.balanceOf(realWallet.address)
-    res.json({
-      address: realWallet.address,
-      balance: ethers.formatUnits(balance, 6),
-      symbol: "USDC",
-      network: "sepolia",
-    })
-  } catch (err) {
-    console.error(err)
-    res.status(500).json({ error: err.message })
-  }
-})
-
-app.post("/send-usdc", async (req, res) => {
-  try {
-    const { to, amount } = req.body
-    if (!to || !amount) return res.status(400).json({ error: "Missing 'to' or 'amount'" })
-
-    const parsedAmount = ethers.parseUnits(amount.toString(), 6)
-    const balance = await usdcContract.balanceOf(realWallet.address)
-
-    if (balance.lt(parsedAmount)) {
-      return res.status(400).json({ error: "Insufficient USDC balance" })
-    }
-
-    const tx = await usdcContract.transfer(to, parsedAmount)
-    await tx.wait()
-
-    res.json({ status: "ok", hash: tx.hash, explorer: `https://sepolia.etherscan.io/tx/${tx.hash}` })
-  } catch (err) {
-    console.error("USDC TRANSFER ERROR:", err)
-    res.status(500).json({ error: err.message })
-  }
-})
-
-/* --------------------------------------------------
-   TEST CONNECTION ON START
--------------------------------------------------- */
-
-async function testConnection() {
-  try {
-    const network = await provider.getNetwork()
-    console.log("✅ Connected to network:", network.name)
-
-    console.log("✅ Relayer wallet address:", realWallet.address)
-
-    const balance = await provider.getBalance(realWallet.address)
-    console.log("✅ Relayer wallet balance:", ethers.formatEther(balance), "ETH")
-  } catch (err) {
-    console.error("❌ Connection test failed:", err.message)
-  }
-}
-
-testConnection()
-
-if (!process.env.VERCEL) {
-  // Only listen when running locally
-  app.listen(4000, () => console.log("🚀 Backend running → http://localhost:4000"))
-}
-
-module.exports = app
+app.listen(4000, () => console.log("🚀 Arc Wallet Backend Live on :4000"));

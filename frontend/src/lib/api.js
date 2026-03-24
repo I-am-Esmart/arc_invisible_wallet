@@ -1,4 +1,6 @@
-const API_BASE = "https://arcinvisiblewallet.vercel.app"
+// const API_BASE = "https://arcinvisiblewallet.vercel.app"
+
+const API_BASE = "http://localhost:4000"
 
 function handleResponse(res) {
   return res.text().then((text) => {
@@ -18,11 +20,11 @@ function handleResponse(res) {
   })
 }
 
-export async function sendTransaction({ to, amount, fromAddress, arcKeyId }) {
+export async function sendTransaction({ to, amount, email, arcKeyId }) {
   const res = await fetch(`${API_BASE}/send-transaction`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ to, amount, fromAddress, arcKeyId }),
+    body: JSON.stringify({ to, amount, email, arcKeyId }), // Added email here
   })
   return handleResponse(res)
 }

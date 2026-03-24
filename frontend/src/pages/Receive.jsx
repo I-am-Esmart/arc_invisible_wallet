@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react"
 import { QRCodeCanvas } from "qrcode.react"
+import { useNavigate } from "react-router-dom"
 
 export default function Receive() {
   const [address, setAddress] = useState("")
   const [copied, setCopied] = useState(false)
 
   const [error, setError] = useState("")
+  const navigate = useNavigate()
 
   useEffect(() => {
     const user = JSON.parse(localStorage.getItem("user"))
@@ -37,6 +39,12 @@ export default function Receive() {
 
   return (
     <div className="max-w-md mx-auto mt-12 p-6 text-center">
+      <button
+        onClick={() => navigate("/dashboard")}
+        className="mb-4 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+      >
+       ← Back
+      </button>
       <h1 className="text-2xl font-bold text-blue-600 mb-6">Receive Crypto</h1>
 
       {/* QR Code */}
@@ -69,10 +77,12 @@ export default function Receive() {
 
       <button
         onClick={copyAddress}
-        className="w-full bg-blue-600 text-white py-3 rounded-xl font-medium hover:bg-blue-700"
+        className="w-full bg-blue-600 text-white py-3 rounded-xl font-medium hover:bg-blue-700 mb-3"
       >
         {copied ? "Copied!" : "Copy Address"}
       </button>
+
+      
     </div>
   )
 }

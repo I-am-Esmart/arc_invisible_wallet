@@ -1,18 +1,27 @@
 import { useEffect, useState } from "react"
 import { fetchTxHistory } from "../lib/api"
+import { useNavigate } from "react-router-dom"
 
 export default function Transactions() {
   const [txs, setTxs] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
+  const navigate = useNavigate()
 
   async function loadTxs() {
     try {
       setLoading(true)
       setError("")
+
+      // Show locally stored txs immediately (useful when backend cannot persist state)
+      const localTxs = JSON.parse(localStorage.getItem("txs") || "[]")
+      if (localTxs.length) {
+        setTxs(localTxs)
+      }
+
       const user = JSON.parse(localStorage.getItem("user"))
       const data = await fetchTxHistory(user?.address)
-      setTxs(data.txs || [])
+      setTxs(data.txs || localTxs)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -28,6 +37,12 @@ export default function Transactions() {
 
   return (
     <div className="max-w-3xl mx-auto mt-10 p-6">
+      <button
+        onClick={() => navigate("/dashboard")}
+        className="mb-4 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+      >
+         ← Back
+      </button>
       <h1 className="text-2xl font-bold mb-6 text-blue-600">
         Transaction History
       </h1>
@@ -51,19 +66,26 @@ export default function Transactions() {
             className="bg-white border rounded-xl p-4 shadow-sm"
           >
             <div className="flex justify-between items-center mb-2">
-              <span className="font-mono text-sm text-gray-600">{tx.hash}</span>
+              <a
+                href={`https://arcscan.io/tx/${tx.hash}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-mono text-sm text-blue-600 hover:underline"
+              >
+                {tx.hash.slice(0, 10)}...{tx.hash.slice(-8)}
+              </a>
               <span className="text-green-600 font-medium">{tx.status}</span>
             </div>
 
             <div className="text-sm space-y-1">
               <div>
-                <strong>From:</strong> {tx.from}
+                <strong>From:</strong> {tx.from?.slice(0, 10)}...{tx.from?.slice(-8)}
               </div>
               <div>
-                <strong>To:</strong> {tx.to}
+                <strong>To:</strong> {tx.to?.slice(0, 10)}...{tx.to?.slice(-8)}
               </div>
               <div>
-                <strong>Amount:</strong> {tx.amount}
+                <strong>Amount:</strong> {tx.amount} USDC
               </div>
               <div className="text-xs text-gray-400">
                 {new Date(tx.timestamp).toLocaleString()}
