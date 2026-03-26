@@ -94,7 +94,7 @@ export default function Dashboard() {
         <button
           type="button"
           onClick={() => setShowFaucetModal(true)}
-          className="mt-4 text-sm font-medium text-blue-600 hover:text-blue-700 hover:underline"
+          className="mt-4 cursor-pointer text-sm font-medium text-blue-600 hover:text-blue-700 hover:underline"
         >
           Get faucet
         </button>

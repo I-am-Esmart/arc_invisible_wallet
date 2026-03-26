@@ -65,7 +65,7 @@ export default function Login() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="bg-white p-8 rounded-2xl shadow max-w-sm w-full">
         <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-bold text-blue-600">Invisible Wallet Login</h1>
+          <h1 className="text-2xl font-bold text-blue-600">Arc Wallet Login</h1>
           {backendHealthy === true && (
             <span className="text-xs px-2 py-1 rounded-full bg-green-100 text-green-700">
               Backend online

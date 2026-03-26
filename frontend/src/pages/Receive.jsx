@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react"
 import { QRCodeCanvas } from "qrcode.react"
 import { useNavigate } from "react-router-dom"
+import { fetchBalance } from "../lib/api"
 
 export default function Receive() {
   const [address, setAddress] = useState("")
@@ -19,8 +20,7 @@ export default function Receive() {
     async function loadAddress() {
       try {
         setError("")
-        const res = await fetch("http://localhost:4000/balance")
-        const data = await res.json()
+        const data = await fetchBalance()
         setAddress(data.address)
       } catch (err) {
         setError("Unable to load address")
@@ -41,7 +41,7 @@ export default function Receive() {
     <div className="max-w-md mx-auto mt-12 p-6 text-center">
       <button
         onClick={() => navigate("/dashboard")}
-        className="mb-4 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+        className="mb-4 cursor-pointer px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
       >
        ← Back
       </button>

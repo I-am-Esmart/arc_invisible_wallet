@@ -1,14 +1,12 @@
-# Invisible Wallet (Arc-style demo)
+# Arc Wallet
 
-A simple “invisible wallet” demo built with React + Express + ethers.js.
+An Arc testnet invisible wallet demo built with React, Express, and ethers.js.
 
-The backend stores user wallets by email (demo only) and the frontend lets you log in, send ETH, view balance, and see transaction history.
+The app lets a user log in with email, view a USDC-style balance, send transactions, copy a receive address, open Arc explorer links, and check locally stored transaction history.
 
----
+## Running locally
 
-## 🚀 Running locally
-
-### 1) Start backend
+### 1. Start the backend
 
 ```bash
 cd backend/server
@@ -16,9 +14,15 @@ npm install
 npm start
 ```
 
-The backend will listen on **http://localhost:4000**.
+The backend runs on `http://localhost:4000`.
 
-### 2) Start frontend
+Important backend env values:
+- `ARC_RPC=https://rpc.testnet.arc.network`
+- `FRONTEND_ORIGIN=http://localhost:5173`
+
+You can copy `backend/server/.env.example` to `.env` and adjust values if needed.
+
+### 2. Start the frontend
 
 ```bash
 cd frontend
@@ -26,21 +30,49 @@ npm install
 npm run dev
 ```
 
-Open: **http://localhost:5173**
+The frontend runs on `http://localhost:5173`.
 
----
+Important frontend env value:
+- `VITE_API_BASE_URL=http://localhost:4000`
 
-## 🗝️ Restore wallet from another device
+You can copy `frontend/.env.example` to `.env.local` for local development.
 
-This demo stores your wallet in a local file (`backend/server/data/store.json`). If you run the backend on a hosted server (e.g. Heroku, Railway, Vercel), you can restore the same wallet from any device by using the same email.
+## Fresh Vercel deployment
 
-1. Deploy backend to a public host.
-2. Update the frontend API URL (`frontend/src/lib/api.js`) to point to the hosted backend.
-3. Open the app, choose **Restore Wallet**, and enter the same email used previously.
+Deploy the frontend and backend as two separate Vercel projects.
 
----
+### Backend project
 
-## 🧠 Notes (for submission)
+Root directory:
+- `backend/server`
 
-- This is a demo implementation; **do not use it in production** (it stores private keys in plain JSON and trusts email as identity).
-- The goal is demonstrating the “invisible wallet” UX: the user never sees a private key, only an email-based restore flow.
+Required environment variables:
+- `ARC_RPC=https://rpc.testnet.arc.network`
+- `FRONTEND_ORIGIN=https://your-frontend-domain.vercel.app`
+
+### Frontend project
+
+Root directory:
+- `frontend`
+
+Required environment variable:
+- `VITE_API_BASE_URL=https://your-backend-domain.vercel.app`
+
+After deployment:
+1. Copy the backend production URL.
+2. Add that URL as `VITE_API_BASE_URL` in the frontend project.
+3. Copy the frontend production URL.
+4. Add that URL as `FRONTEND_ORIGIN` in the backend project.
+5. Redeploy both projects so the updated env vars are applied.
+
+## Faucet steps
+
+To get Arc testnet USDC:
+1. Visit `https://faucet.circle.com/`
+2. Click `USDC`
+3. Choose `Arc Testnet` in the network tab
+
+## Notes
+
+- This is a demo implementation and should not be used in production.
+- The goal is to demonstrate invisible wallet UX with email-based access and recovery.
