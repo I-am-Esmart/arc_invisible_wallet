@@ -22,10 +22,7 @@ export default function RestoreInstructionsModal({ open, onClose }) {
             Your wallet is linked to the email you use to log in. To restore the same
             wallet on another device, just use the same email.
           </p>
-          <p>
-            This demo stores wallet data on the server, so make sure the backend is running
-            somewhere reachable (e.g., on a hosted server like Heroku, Vercel, or a VPS).
-          </p>
+          
           <p>
             <strong>Steps:</strong>
           </p>
