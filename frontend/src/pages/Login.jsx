@@ -7,7 +7,6 @@ export default function Login() {
   const [email, setEmail] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
-  const [backendHealthy, setBackendHealthy] = useState(null)
   const [backendError, setBackendError] = useState("")
   const [checkingBackend, setCheckingBackend] = useState(false)
   const [showInstructions, setShowInstructions] = useState(false)
@@ -24,11 +23,9 @@ export default function Login() {
     setCheckingBackend(true)
     try {
       await checkHealth()
-      setBackendHealthy(true)
       setBackendError("")
       return true
     } catch (err) {
-      setBackendHealthy(false)
       setBackendError(err.message || "Failed to reach backend")
       return false
     } finally {
@@ -64,32 +61,8 @@ export default function Login() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="bg-white p-8 rounded-2xl shadow max-w-sm w-full">
-        <div className="flex items-center justify-between mb-6">
+        <div className="mb-6">
           <h1 className="text-2xl font-bold text-blue-600">Arc Wallet Login</h1>
-          {backendHealthy === true && (
-            <span className="text-xs px-2 py-1 rounded-full bg-green-100 text-green-700">
-              Backend online
-            </span>
-          )}
-          {backendHealthy === false && (
-            <span className="text-xs px-2 py-1 rounded-full bg-red-100 text-red-700">
-              Backend offline
-            </span>
-          )}
-          {backendError && (
-            <div className="mt-2 text-xs text-red-600">
-              {backendError}
-            </div>
-          )}
-          {backendHealthy === false && (
-            <button
-              onClick={checkBackend}
-              disabled={checkingBackend}
-              className="mt-2 text-xs px-3 py-1 rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200"
-            >
-              {checkingBackend ? "Retrying…" : "Retry connection"}
-            </button>
-          )}
         </div>
 
         <input
@@ -102,7 +75,7 @@ export default function Login() {
 
         {error && (
           <div className="text-red-600 bg-red-50 p-3 rounded-xl mb-4">
-            ❌ {error}
+            Error: {error}
           </div>
         )}
 
@@ -111,30 +84,34 @@ export default function Login() {
           disabled={loading}
           className="w-full bg-blue-600 text-white py-3 rounded-xl font-medium"
         >
-          {loading ? "Creating wallet…" : "Create / Restore Wallet"}
+          {loading ? "Creating wallet..." : "Create / Restore Wallet"}
         </button>
 
         <div className="text-center mt-6 text-sm text-gray-500">
-          Already created a wallet?{' '}
+          Already created a wallet?{" "}
           <Link to="/restore" className="text-blue-600 hover:underline">
             Restore it here
           </Link>
-          {' | '}
+          {" | "}
           <button
             onClick={() => setShowInstructions(true)}
-            className="text-blue-600 hover:underline"
+            className="cursor-pointer text-blue-600 hover:underline"
           >
             How it works
           </button>
         </div>
 
-        {backendHealthy === false && (
+        {backendError && (
           <div className="mt-4 text-sm text-gray-600">
+            <div className="mb-2 text-xs text-red-600">
+              {backendError}
+            </div>
             <button
               onClick={checkBackend}
-              className="px-3 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200"
+              disabled={checkingBackend}
+              className="cursor-pointer px-3 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200"
             >
-              Retry connection
+              {checkingBackend ? "Retrying..." : "Retry connection"}
             </button>
           </div>
         )}
