@@ -3,22 +3,26 @@ const cors = require("cors");
 require("dotenv").config();
 const { ethers } = require("ethers");
 
+function normalizeOrigin(origin) {
+  return origin.replace(/\/$/, "");
+}
+
 const allowedOrigins = (process.env.FRONTEND_ORIGIN || "http://localhost:5173")
   .split(",")
-  .map((origin) => origin.trim())
+  .map((origin) => normalizeOrigin(origin.trim()))
   .filter(Boolean);
 
 const app = express();
 app.use(express.json());
 app.use(cors({
   origin(origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
+    if (!origin || allowedOrigins.includes(normalizeOrigin(origin))) {
       return callback(null, true);
     }
 
     return callback(new Error("Not allowed by CORS"));
   },
-  methods: ["GET", "POST"],
+  methods: ["GET", "POST", "OPTIONS"],
   credentials: true
 }));
 
@@ -32,15 +36,19 @@ function walletFromEmail(email) {
   const hash = ethers.keccak256(ethers.toUtf8Bytes(email || "default"));
   const arcKeyId = `arc-${hash.slice(2, 12)}`;
   const privateKey = ethers.keccak256(ethers.toUtf8Bytes(arcKeyId));
-  return { 
+  return {
     signer: new ethers.Wallet(privateKey, provider),
-    arcKeyId 
+    arcKeyId
   };
 }
 
 /* --------------------------------------------------
    ENDPOINTS
 -------------------------------------------------- */
+
+app.get("/", (req, res) => {
+  res.json({ status: "ok", message: "Arc Wallet Backend is running" });
+});
 
 app.get("/health", (req, res) => {
   res.json({ status: "ok", message: "Arc Wallet Backend is running" });
@@ -52,11 +60,11 @@ app.post("/auth/login", async (req, res) => {
     if (!email) return res.status(400).json({ error: "Email required" });
 
     const { signer, arcKeyId } = walletFromEmail(email);
-    
+
     // FORCE FETCH FROM ARC RPC
     const rawBalance = await provider.getBalance(signer.address);
     // Arc native token uses 18 decimals (like ETH), not 6
-    const balance = ethers.formatUnits(rawBalance, 18); 
+    const balance = ethers.formatUnits(rawBalance, 18);
 
     console.log(`User Logged In: ${signer.address} | Balance: ${balance} USDC`);
 
@@ -81,7 +89,7 @@ app.get("/balance", async (req, res) => {
 
     const raw = await provider.getBalance(address);
     const balance = ethers.formatUnits(raw, 18);
-    
+
     res.json({ balance, symbol: "USDC", address });
   } catch (err) {
     console.error(err);
@@ -106,10 +114,10 @@ app.get("/txs", async (req, res) => {
 app.post("/send-transaction", async (req, res) => {
   try {
     const { to, amount, email } = req.body;
-    
+
     if (!to || !amount || !email) {
-      return res.status(400).json({ 
-        error: "Missing required fields: to, amount, email" 
+      return res.status(400).json({
+        error: "Missing required fields: to, amount, email"
       });
     }
 
@@ -124,7 +132,7 @@ app.post("/send-transaction", async (req, res) => {
 
     // Arc uses 18 decimals for native token
     const value = ethers.parseUnits(amount.toString(), 18);
-    
+
     // Get current gas price from Arc
     const feeData = await provider.getFeeData();
     const gasPrice = feeData.gasPrice;
@@ -161,11 +169,14 @@ app.post("/send-transaction", async (req, res) => {
       amount,
       explorer: `https://testnet.arcscan.app/tx/${tx.hash}`
     });
-
   } catch (err) {
     console.error("Send transaction error:", err);
     res.status(500).json({ error: err.message });
   }
 });
 
-app.listen(4000, () => console.log("🚀 Arc Wallet Backend Live on :4000"));
+if (require.main === module) {
+  app.listen(4000, () => console.log("Arc Wallet Backend Live on :4000"));
+}
+
+module.exports = app;
