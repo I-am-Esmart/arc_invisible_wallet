@@ -3,17 +3,24 @@ const cors = require("cors");
 require("dotenv").config();
 const { ethers } = require("ethers");
 
-
+const allowedOrigins = (process.env.FRONTEND_ORIGIN || "http://localhost:5173")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
 
 const app = express();
-app.use(cors());
 app.use(express.json());
-
 app.use(cors({
-  origin: "http://localhost:5173", // Match your Vite port
+  origin(origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+
+    return callback(new Error("Not allowed by CORS"));
+  },
   methods: ["GET", "POST"],
   credentials: true
-}))
+}));
 
 // 1. ARC TESTNET SETTINGS (Chain ID: 5042002)
 const provider = new ethers.JsonRpcProvider(process.env.ARC_RPC || "https://rpc.testnet.arc.network");
@@ -142,15 +149,17 @@ app.post("/send-transaction", async (req, res) => {
     });
 
     console.log(`Transaction sent: ${tx.hash}`);
-    const receipt = await tx.wait();
-    
-    res.json({ 
-      status: "ok", 
+
+    // Wait for confirmation before returning the tx metadata used by the frontend.
+    await tx.wait();
+
+    res.json({
+      status: "ok",
       hash: tx.hash,
       from: signerAddress,
       to,
       amount,
-      receipt: receipt ? receipt.blockNumber : null
+      explorer: `https://testnet.arcscan.app/tx/${tx.hash}`
     });
 
   } catch (err) {

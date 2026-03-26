@@ -1,6 +1,8 @@
 import { useState } from "react"
 import { sendTransaction } from "../lib/api"
 
+const ARC_EXPLORER_BASE = "https://testnet.arcscan.app/tx"
+
 export default function SendTransactionCard() {
   const [to, setTo] = useState("")
   const [amount, setAmount] = useState("")
@@ -39,6 +41,7 @@ export default function SendTransactionCard() {
         amount,
         status: "confirmed",
         timestamp: Date.now(),
+        explorer: res.explorer || `${ARC_EXPLORER_BASE}/${res.hash}`,
       }
       const existing = JSON.parse(localStorage.getItem("txs") || "[]")
       localStorage.setItem("txs", JSON.stringify([txRecord, ...existing]))
@@ -81,7 +84,7 @@ export default function SendTransactionCard() {
           <div className="p-3 bg-green-50 text-green-600 rounded-lg text-sm">
             ✓ Transaction sent! 
             <a
-              href={`https://arcscan.io/tx/${result.hash}`}
+              href={result.explorer || `${ARC_EXPLORER_BASE}/${result.hash}`}
               target="_blank"
               rel="noopener noreferrer"
               className="block text-blue-600 hover:underline font-mono text-xs mt-1"

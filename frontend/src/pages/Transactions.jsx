@@ -2,36 +2,53 @@ import { useEffect, useState } from "react"
 import { fetchTxHistory } from "../lib/api"
 import { useNavigate } from "react-router-dom"
 
+const ARC_EXPLORER_BASE = "https://testnet.arcscan.app/tx"
+
+function getStoredTxs() {
+  return JSON.parse(localStorage.getItem("txs") || "[]")
+}
+
+function getExplorerUrl(tx) {
+  return tx.explorer || `${ARC_EXPLORER_BASE}/${tx.hash}`
+}
+
 export default function Transactions() {
   const [txs, setTxs] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const navigate = useNavigate()
 
-  async function loadTxs() {
+  async function loadTxs({ silent = false } = {}) {
     try {
-      setLoading(true)
+      if (!silent) {
+        setLoading(true)
+      }
       setError("")
 
       // Show locally stored txs immediately (useful when backend cannot persist state)
-      const localTxs = JSON.parse(localStorage.getItem("txs") || "[]")
+      const localTxs = getStoredTxs()
       if (localTxs.length) {
         setTxs(localTxs)
       }
 
       const user = JSON.parse(localStorage.getItem("user"))
       const data = await fetchTxHistory(user?.address)
-      setTxs(data.txs || localTxs)
+      const nextTxs = Array.isArray(data.txs) && data.txs.length > 0 ? data.txs : localTxs
+      setTxs(nextTxs)
     } catch (err) {
       setError(err.message)
     } finally {
-      setLoading(false)
+      if (!silent) {
+        setLoading(false)
+      }
     }
   }
 
   useEffect(() => {
     loadTxs()
-    const interval = setInterval(loadTxs, 5000) // auto refresh
+    const interval = setInterval(() => {
+      loadTxs({ silent: true })
+    }, 30000)
     return () => clearInterval(interval)
   }, [])
 
@@ -67,7 +84,7 @@ export default function Transactions() {
           >
             <div className="flex justify-between items-center mb-2">
               <a
-                href={`https://arcscan.io/tx/${tx.hash}`}
+                href={getExplorerUrl(tx)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="font-mono text-sm text-blue-600 hover:underline"

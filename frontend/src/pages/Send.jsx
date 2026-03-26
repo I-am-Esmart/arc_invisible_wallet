@@ -2,6 +2,8 @@ import { useState } from "react"
 import { sendTransaction } from "../lib/api"
 import { useNavigate } from "react-router-dom"
 
+const ARC_EXPLORER_BASE = "https://testnet.arcscan.app/tx"
+
 export default function Send() {
   const [to, setTo] = useState("")
   const [amount, setAmount] = useState("")
@@ -39,6 +41,7 @@ export default function Send() {
         amount,
         status: "confirmed",
         timestamp: Date.now(),
+        explorer: res.explorer || `${ARC_EXPLORER_BASE}/${res.hash}`,
       }
       const existing = JSON.parse(localStorage.getItem("txs") || "[]")
       localStorage.setItem("txs", JSON.stringify([txRecord, ...existing]))
@@ -106,7 +109,7 @@ export default function Send() {
         <div className="mt-4 text-green-600 bg-green-50 p-3 rounded-lg">
           ✅ Transaction sent!
           <a
-            href={`https://explorer.testnet.arc.network/tx/${result.hash}`}
+            href={result.explorer || `${ARC_EXPLORER_BASE}/${result.hash}`}
             target="_blank"
             rel="noopener noreferrer"
             className="block mt-2 underline"

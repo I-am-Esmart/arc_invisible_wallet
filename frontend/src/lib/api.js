@@ -1,6 +1,4 @@
-// const API_BASE = "https://arcinvisiblewallet.vercel.app"
-
-const API_BASE = "http://localhost:4000"
+const API_BASE = (import.meta.env.VITE_API_BASE_URL || "http://localhost:4000").replace(/\/$/, "")
 
 function handleResponse(res) {
   return res.text().then((text) => {

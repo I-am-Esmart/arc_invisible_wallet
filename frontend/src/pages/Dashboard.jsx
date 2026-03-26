@@ -1,12 +1,24 @@
 import { useEffect, useState } from "react"
 import { fetchBalance } from "../lib/api"
 import { Link, useNavigate } from "react-router-dom"
+import FaucetInstructionsModal from "../components/FaucetInstructionsModal"
+
+function formatUsdcBalance(balance) {
+  const numericBalance = Number(balance)
+
+  if (!Number.isFinite(numericBalance)) {
+    return balance
+  }
+
+  return numericBalance.toFixed(2)
+}
 
 export default function Dashboard() {
   const navigate = useNavigate()
   const [wallet, setWallet] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
+  const [showFaucetModal, setShowFaucetModal] = useState(false)
 
   function handleLogout() {
     localStorage.removeItem("user")
@@ -73,12 +85,19 @@ export default function Dashboard() {
         <div className="font-mono text-sm break-all mb-4">
           {user.address}
         </div>
-        
 
         <div className="text-sm text-gray-500 mb-1 mt-4">Balance</div>
         <div className="text-3xl font-bold">
-          {wallet.balance} {wallet.symbol || 'USDC'}
+          {formatUsdcBalance(wallet.balance)} {wallet.symbol || "USDC"}
         </div>
+
+        <button
+          type="button"
+          onClick={() => setShowFaucetModal(true)}
+          className="mt-4 text-sm font-medium text-blue-600 hover:text-blue-700 hover:underline"
+        >
+          Get faucet
+        </button>
       </div>
 
       <div className="grid grid-cols-3 gap-4">
@@ -103,6 +122,11 @@ export default function Dashboard() {
           History
         </Link>
       </div>
+
+      <FaucetInstructionsModal
+        open={showFaucetModal}
+        onClose={() => setShowFaucetModal(false)}
+      />
     </div>
   )
 }
