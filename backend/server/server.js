@@ -3,8 +3,37 @@ const cors = require("cors");
 require("dotenv").config();
 const { ethers } = require("ethers");
 
+const ERC20_ABI = [
+  "function balanceOf(address owner) view returns (uint256)",
+  "function decimals() view returns (uint8)",
+  "function transfer(address to, uint256 value) returns (bool)"
+];
+
+const TOKENS = {
+  USDC: {
+    symbol: "USDC",
+    address: "0x3600000000000000000000000000000000000000"
+  },
+  EURC: {
+    symbol: "EURC",
+    address: "0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a"
+  }
+};
+
 function normalizeOrigin(origin) {
   return origin.replace(/\/$/, "");
+}
+
+function normalizeToken(token) {
+  return (token || "USDC").toUpperCase();
+}
+
+function getTokenConfig(token) {
+  return TOKENS[normalizeToken(token)] || null;
+}
+
+function buildTokenError() {
+  return `Unsupported token. Supported tokens: ${Object.keys(TOKENS).join(", ")}`;
 }
 
 const allowedOrigins = (process.env.FRONTEND_ORIGIN || "http://localhost:5173")
@@ -26,12 +55,8 @@ app.use(cors({
   credentials: true
 }));
 
-// 1. ARC TESTNET SETTINGS (Chain ID: 5042002)
 const provider = new ethers.JsonRpcProvider(process.env.ARC_RPC || "https://rpc.testnet.arc.network");
 
-/* --------------------------------------------------
-   DETERMINISTIC WALLET DERIVATION
--------------------------------------------------- */
 function walletFromEmail(email) {
   const hash = ethers.keccak256(ethers.toUtf8Bytes(email || "default"));
   const arcKeyId = `arc-${hash.slice(2, 12)}`;
@@ -42,9 +67,38 @@ function walletFromEmail(email) {
   };
 }
 
-/* --------------------------------------------------
-   ENDPOINTS
--------------------------------------------------- */
+function getTokenContract(token, runner = provider) {
+  const tokenConfig = getTokenConfig(token);
+
+  if (!tokenConfig) {
+    throw new Error(buildTokenError());
+  }
+
+  return new ethers.Contract(tokenConfig.address, ERC20_ABI, runner);
+}
+
+async function fetchTokenBalance(address, token) {
+  const tokenConfig = getTokenConfig(token);
+  const tokenContract = getTokenContract(tokenConfig.symbol);
+  const [rawBalance, decimals] = await Promise.all([
+    tokenContract.balanceOf(address),
+    tokenContract.decimals()
+  ]);
+
+  return {
+    symbol: tokenConfig.symbol,
+    address: tokenConfig.address,
+    balance: ethers.formatUnits(rawBalance, decimals)
+  };
+}
+
+async function fetchAllTokenBalances(address) {
+  const entries = await Promise.all(
+    Object.keys(TOKENS).map(async (token) => [token, await fetchTokenBalance(address, token)])
+  );
+
+  return Object.fromEntries(entries);
+}
 
 app.get("/", (req, res) => {
   res.json({ status: "ok", message: "Arc Wallet Backend is running" });
@@ -60,20 +114,15 @@ app.post("/auth/login", async (req, res) => {
     if (!email) return res.status(400).json({ error: "Email required" });
 
     const { signer, arcKeyId } = walletFromEmail(email);
+    const balances = await fetchAllTokenBalances(signer.address);
 
-    // FORCE FETCH FROM ARC RPC
-    const rawBalance = await provider.getBalance(signer.address);
-    // Arc native token uses 18 decimals (like ETH), not 6
-    const balance = ethers.formatUnits(rawBalance, 18);
-
-    console.log(`User Logged In: ${signer.address} | Balance: ${balance} USDC`);
+    console.log(`User Logged In: ${signer.address}`);
 
     res.json({
       email,
       address: signer.address,
       arcKeyId,
-      balance,
-      symbol: "USDC",
+      balances,
       network: "arc-testnet"
     });
   } catch (err) {
@@ -84,13 +133,24 @@ app.post("/auth/login", async (req, res) => {
 
 app.get("/balance", async (req, res) => {
   try {
+    const { address, token } = req.query;
+    if (!address) return res.status(400).json({ error: "Address required" });
+
+    const tokenBalance = await fetchTokenBalance(address, token || "USDC");
+    res.json({ ...tokenBalance, address });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/balances", async (req, res) => {
+  try {
     const { address } = req.query;
     if (!address) return res.status(400).json({ error: "Address required" });
 
-    const raw = await provider.getBalance(address);
-    const balance = ethers.formatUnits(raw, 18);
-
-    res.json({ balance, symbol: "USDC", address });
+    const balances = await fetchAllTokenBalances(address);
+    res.json({ address, balances });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
@@ -102,8 +162,6 @@ app.get("/txs", async (req, res) => {
     const { address } = req.query;
     if (!address) return res.status(400).json({ error: "Address required" });
 
-    // Arc testnet doesn't have a simple way to fetch tx history from RPC
-    // Return empty array - frontend uses localStorage for tx history
     res.json({ txs: [], address });
   } catch (err) {
     console.error(err);
@@ -113,52 +171,59 @@ app.get("/txs", async (req, res) => {
 
 app.post("/send-transaction", async (req, res) => {
   try {
-    const { to, amount, email } = req.body;
+    const { to, amount, email, token } = req.body;
+    const tokenConfig = getTokenConfig(token);
 
-    if (!to || !amount || !email) {
+    if (!to || !amount || !email || !tokenConfig) {
       return res.status(400).json({
-        error: "Missing required fields: to, amount, email"
+        error: !tokenConfig ? buildTokenError() : "Missing required fields: to, amount, email, token"
       });
     }
 
-    // Resolve signer from email
     const { signer } = walletFromEmail(email);
     const signerAddress = await signer.getAddress();
 
-    // Validate recipient address
     if (!ethers.isAddress(to)) {
       return res.status(400).json({ error: "Invalid recipient address" });
     }
 
-    // Arc uses 18 decimals for native token
-    const value = ethers.parseUnits(amount.toString(), 18);
+    const tokenContract = getTokenContract(tokenConfig.symbol, signer);
+    const [rawTokenBalance, decimals, nativeBalance, feeData] = await Promise.all([
+      tokenContract.balanceOf(signerAddress),
+      tokenContract.decimals(),
+      provider.getBalance(signerAddress),
+      provider.getFeeData()
+    ]);
 
-    // Get current gas price from Arc
-    const feeData = await provider.getFeeData();
-    const gasPrice = feeData.gasPrice;
-    const gasLimit = BigInt(21000);
-    const totalNeeded = value + (gasLimit * gasPrice);
+    const value = ethers.parseUnits(amount.toString(), decimals);
 
-    const balanceRaw = await provider.getBalance(signerAddress);
-
-    if (balanceRaw < totalNeeded) {
+    if (rawTokenBalance < value) {
       return res.status(400).json({
-        error: `Insufficient USDC. Have ${ethers.formatUnits(balanceRaw, 18)} USDC, need ~${ethers.formatUnits(totalNeeded, 18)} USDC.`
+        error: `Insufficient ${tokenConfig.symbol}. Have ${ethers.formatUnits(rawTokenBalance, decimals)} ${tokenConfig.symbol}, need ${ethers.formatUnits(value, decimals)} ${tokenConfig.symbol}.`
       });
     }
 
-    console.log(`Sending ${amount} USDC from ${signerAddress} to ${to}`);
+    const gasLimit = BigInt(100000);
+    const overrides = { gasLimit };
 
-    const tx = await signer.sendTransaction({
-      to,
-      value,
-      gasLimit,
-      gasPrice
-    });
+    if (feeData.gasPrice != null) {
+      overrides.gasPrice = feeData.gasPrice;
+    }
+
+    const estimatedGasCost = gasLimit * (overrides.gasPrice || BigInt(0));
+
+    if (nativeBalance < estimatedGasCost) {
+      return res.status(400).json({
+        error: `Insufficient ARC for gas. Have ${ethers.formatUnits(nativeBalance, 18)} ARC, need about ${ethers.formatUnits(estimatedGasCost, 18)} ARC.`
+      });
+    }
+
+    console.log(`Sending ${amount} ${tokenConfig.symbol} from ${signerAddress} to ${to}`);
+
+    const tx = await tokenContract.transfer(to, value, overrides);
 
     console.log(`Transaction sent: ${tx.hash}`);
 
-    // Wait for confirmation before returning the tx metadata used by the frontend.
     await tx.wait();
 
     res.json({
@@ -167,6 +232,8 @@ app.post("/send-transaction", async (req, res) => {
       from: signerAddress,
       to,
       amount,
+      token: tokenConfig.symbol,
+      symbol: tokenConfig.symbol,
       explorer: `https://testnet.arcscan.app/tx/${tx.hash}`
     });
   } catch (err) {

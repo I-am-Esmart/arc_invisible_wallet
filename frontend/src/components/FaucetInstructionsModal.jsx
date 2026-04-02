@@ -6,9 +6,9 @@ export default function FaucetInstructionsModal({ open, onClose }) {
       <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-xl font-bold text-gray-900">Get Arc Testnet USDC</h2>
+            <h2 className="text-xl font-bold text-gray-900">Get Arc Testnet Tokens</h2>
             <p className="mt-1 text-sm text-gray-600">
-              Follow these steps to request faucet USDC for your wallet.
+              Follow these steps to request faucet tokens for your wallet.
             </p>
           </div>
           <button
@@ -32,8 +32,9 @@ export default function FaucetInstructionsModal({ open, onClose }) {
               https://faucet.circle.com/
             </a>
           </li>
-          <li>Click USDC.</li>
+          <li>Choose USDC or EURC.</li>
           <li>Choose Arc Testnet in the network tab.</li>
+          <li>Submit the request for the token you want to test.</li>
         </ol>
 
         <div className="mt-6 flex justify-end">

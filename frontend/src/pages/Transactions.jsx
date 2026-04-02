@@ -102,7 +102,7 @@ export default function Transactions() {
                 <strong>To:</strong> {tx.to?.slice(0, 10)}...{tx.to?.slice(-8)}
               </div>
               <div>
-                <strong>Amount:</strong> {tx.amount} USDC
+                <strong>Amount:</strong> {tx.amount} {tx.symbol || tx.token || "USDC"}
               </div>
               <div className="text-xs text-gray-400">
                 {new Date(tx.timestamp).toLocaleString()}

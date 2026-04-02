@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react"
-import { fetchBalance } from "../lib/api"
+import { fetchBalances } from "../lib/api"
 import { Link, useNavigate } from "react-router-dom"
 import FaucetInstructionsModal from "../components/FaucetInstructionsModal"
+import { TOKEN_OPTIONS } from "../lib/tokens"
 
-function formatUsdcBalance(balance) {
+function formatTokenBalance(balance) {
   const numericBalance = Number(balance)
 
   if (!Number.isFinite(numericBalance)) {
@@ -27,32 +28,32 @@ export default function Dashboard() {
 
   const user = JSON.parse(localStorage.getItem("user"))
 
-  // AUTH GUARD
   useEffect(() => {
     if (!user) {
       navigate("/")
     }
   }, [user, navigate])
 
-  // LOAD WALLET
   useEffect(() => {
     async function load() {
       if (!user) return
+
       try {
         setError("")
-        const data = await fetchBalance(user.address)
+        const data = await fetchBalances(user.address)
         setWallet(data)
       } catch (err) {
-        setError(err.message || "Failed to load balance")
+        setError(err.message || "Failed to load balances")
       } finally {
         setLoading(false)
       }
     }
+
     load()
   }, [user])
 
   if (!user || loading) {
-    return <div className="p-6 text-gray-500">Loading wallet…</div>
+    return <div className="p-6 text-gray-500">Loading wallet...</div>
   }
 
   if (error) {
@@ -86,9 +87,23 @@ export default function Dashboard() {
           {user.address}
         </div>
 
-        <div className="text-sm text-gray-500 mb-1 mt-4">Balance</div>
-        <div className="text-3xl font-bold">
-          {formatUsdcBalance(wallet.balance)} {wallet.symbol || "USDC"}
+        <div className="text-sm text-gray-500 mb-3 mt-4">Balances</div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {TOKEN_OPTIONS.map((token) => {
+            const tokenBalance = wallet?.balances?.[token.value]?.balance || "0"
+
+            return (
+              <div
+                key={token.value}
+                className="rounded-xl border border-gray-200 bg-gray-50 p-4"
+              >
+                <div className="text-sm text-gray-500">{token.label}</div>
+                <div className="mt-1 text-2xl font-bold">
+                  {formatTokenBalance(tokenBalance)} {token.label}
+                </div>
+              </div>
+            )
+          })}
         </div>
 
         <button

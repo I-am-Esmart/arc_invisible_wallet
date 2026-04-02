@@ -2,7 +2,7 @@
 
 An Arc testnet invisible wallet demo built with React, Express, and ethers.js.
 
-The app lets a user log in with email, view a USDC-style balance, send transactions, copy a receive address, open Arc explorer links, and check locally stored transaction history.
+The app lets a user log in with email, view USDC and EURC balances, send either stablecoin, copy a receive address, open Arc explorer links, and check locally stored transaction history.
 
 ## Running locally
 
@@ -67,9 +67,9 @@ After deployment:
 
 ## Faucet steps
 
-To get Arc testnet USDC:
+To get Arc testnet USDC or EURC:
 1. Visit `https://faucet.circle.com/`
-2. Click `USDC`
+2. Choose `USDC` or `EURC`
 3. Choose `Arc Testnet` in the network tab
 
 ## Notes

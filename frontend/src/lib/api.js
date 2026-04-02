@@ -18,11 +18,11 @@ function handleResponse(res) {
   })
 }
 
-export async function sendTransaction({ to, amount, email, arcKeyId }) {
+export async function sendTransaction({ to, amount, email, arcKeyId, token }) {
   const res = await fetch(`${API_BASE}/send-transaction`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ to, amount, email, arcKeyId }), // Added email here
+    body: JSON.stringify({ to, amount, email, arcKeyId, token }),
   })
   return handleResponse(res)
 }
@@ -36,6 +36,12 @@ export async function fetchTxHistory(address) {
 export async function fetchBalance(address) {
   const query = address ? `?address=${encodeURIComponent(address)}` : ""
   const res = await fetch(`${API_BASE}/balance${query}`)
+  return handleResponse(res)
+}
+
+export async function fetchBalances(address) {
+  const query = address ? `?address=${encodeURIComponent(address)}` : ""
+  const res = await fetch(`${API_BASE}/balances${query}`)
   return handleResponse(res)
 }
 
