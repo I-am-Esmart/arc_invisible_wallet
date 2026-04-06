@@ -1,5 +1,10 @@
 import Link from "next/link";
-import type { ComponentProps, ReactNode } from "react";
+import {
+  cloneElement,
+  isValidElement,
+  type ReactElement,
+  type ReactNode,
+} from "react";
 
 type ButtonProps = {
   children: ReactNode;
@@ -8,15 +13,8 @@ type ButtonProps = {
   type?: "button" | "submit" | "reset";
   disabled?: boolean;
   onClick?: () => void;
-  asChild?: false;
+  asChild?: boolean;
 };
-
-type ButtonLinkProps = {
-  children: ReactNode;
-  className?: string;
-  variant?: "primary" | "secondary" | "ghost";
-  asChild: true;
-} & ComponentProps<typeof Link>;
 
 function getButtonClasses(variant: NonNullable<ButtonProps["variant"]> = "primary") {
   const base =
@@ -31,23 +29,35 @@ function getButtonClasses(variant: NonNullable<ButtonProps["variant"]> = "primar
   return `${base} ${variants[variant]}`;
 }
 
-export function Button(props: ButtonProps | ButtonLinkProps) {
-  const { className, variant = "primary" } = props;
+export function Button({
+  children,
+  className,
+  variant = "primary",
+  type = "button",
+  disabled,
+  onClick,
+  asChild = false,
+}: ButtonProps) {
   const classes = `${getButtonClasses(variant)} ${className || ""}`.trim();
 
-  if ("asChild" in props && props.asChild) {
-    const { asChild, children, variant: _variant, className: _className, ...linkProps } = props;
-    return (
-      <Link {...linkProps} className={classes}>
-        {children}
-      </Link>
-    );
+  if (asChild && isValidElement(children)) {
+    const child = children as ReactElement<{ className?: string }>;
+    const childClassName = child.props.className || "";
+
+    return cloneElement(child, {
+      className: `${classes} ${childClassName}`.trim(),
+    });
   }
 
-  const { children, type = "button", disabled, onClick } = props;
+  if (asChild) {
+    return <span className={classes}>{children}</span>;
+  }
+
   return (
     <button type={type} disabled={disabled} onClick={onClick} className={classes}>
       {children}
     </button>
   );
 }
+
+export { Link };

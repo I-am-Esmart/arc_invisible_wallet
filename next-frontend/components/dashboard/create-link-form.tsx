@@ -23,12 +23,13 @@ export function CreateLinkForm({ compact = false }: { compact?: boolean }) {
       <form action={formAction} className="mt-6 space-y-5">
         <Field
           label="Amount"
-          hint="Optional. Leave blank if you want the backend to decide or if the amount is flexible."
+          hint="Required. This amount becomes part of the public link URL."
         >
           <input
             name="amount"
             type="text"
             placeholder="500"
+            required
             className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
           />
         </Field>

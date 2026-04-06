@@ -5,9 +5,9 @@ export async function listPayments() {
   return backendFetch<Payment[]>("/payments");
 }
 
-export async function initiatePaymentForLink(linkId: string) {
+export async function initiatePaymentForLink(linkId: string, payerEmail: string) {
   return backendFetch<Payment>(`/payment-links/${encodeURIComponent(linkId)}/pay`, {
     method: "POST",
-    body: JSON.stringify({}),
+    body: JSON.stringify({ payerEmail }),
   });
 }

@@ -1,5 +1,7 @@
 {
   "users": {},
   "wallets": {},
-  "txs": []
+  "txs": [],
+  "paymentLinks": [],
+  "payments": []
 }

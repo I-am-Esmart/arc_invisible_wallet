@@ -10,7 +10,7 @@ export function PaymentLinkCard({
   payAction,
 }: {
   paymentLink: PaymentLink;
-  payAction: (state: PayActionState) => Promise<PayActionState>;
+  payAction: (state: PayActionState, formData: FormData) => Promise<PayActionState>;
 }) {
   return (
     <Card className="p-8 sm:p-10">
@@ -35,7 +35,8 @@ export function PaymentLinkCard({
           {formatMoney(paymentLink.amount, paymentLink.currency)}
         </div>
         <div className="mt-3 text-sm text-slate-500">
-          The payment will be handled by the existing backend wallet system.
+          Enter your email and the backend will use the existing wallet flow to process
+          the payment.
         </div>
       </div>
 

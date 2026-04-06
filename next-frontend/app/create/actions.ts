@@ -15,16 +15,23 @@ export async function createPaymentLinkAction(
   const amount = String(formData.get("amount") || "").trim();
   const description = String(formData.get("description") || "").trim();
 
-  if (amount && Number.isNaN(Number(amount))) {
+  if (!amount) {
     return {
       status: "error",
-      message: "Amount must be a valid number.",
+      message: "Amount is required.",
+    };
+  }
+
+  if (Number.isNaN(Number(amount)) || Number(amount) <= 0) {
+    return {
+      status: "error",
+      message: "Amount must be a positive number.",
     };
   }
 
   try {
     const paymentLink = await createPaymentLink({
-      amount: amount || undefined,
+      amount,
       description: description || undefined,
     });
 
