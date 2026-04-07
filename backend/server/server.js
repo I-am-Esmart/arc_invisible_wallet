@@ -23,7 +23,12 @@ const TOKENS = {
   }
 };
 
-const STORE_PATH = path.join(__dirname, "data", "store.json");
+const BUNDLED_STORE_PATH = path.join(__dirname, "data", "store.json");
+const STORE_PATH = process.env.STORE_PATH
+  ? path.resolve(process.env.STORE_PATH)
+  : process.env.VERCEL
+    ? path.join("/tmp", "arc-wallet-store.json")
+    : BUNDLED_STORE_PATH;
 const DEFAULT_OWNER_USERNAME = process.env.PAYMENT_LINK_OWNER_USERNAME || "emmanuel";
 const DEFAULT_OWNER_EMAIL = process.env.PAYMENT_LINK_OWNER_EMAIL || "emmanuel@example.com";
 const DEFAULT_LINK_CURRENCY = (process.env.PAYMENT_LINK_DEFAULT_CURRENCY || "USDC").toUpperCase();
@@ -63,6 +68,11 @@ function ensureStoreFile() {
   }
 
   if (!fs.existsSync(STORE_PATH)) {
+    if (STORE_PATH !== BUNDLED_STORE_PATH && fs.existsSync(BUNDLED_STORE_PATH)) {
+      fs.copyFileSync(BUNDLED_STORE_PATH, STORE_PATH);
+      return;
+    }
+
     fs.writeFileSync(STORE_PATH, JSON.stringify(createEmptyStore(), null, 2));
   }
 }

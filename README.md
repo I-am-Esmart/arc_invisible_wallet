@@ -4,7 +4,7 @@ An Arc testnet invisible wallet demo built with React, Express, and ethers.js.
 
 The app lets a user log in with email, view USDC and EURC balances, send either stablecoin, copy a receive address, open Arc explorer links, and check locally stored transaction history.
 
-There is also a separate Next.js payment-links frontend in `next-frontend/` for public payment pages and a management dashboard.
+There is also a separate Next.js payment-links frontend in `next-frontend/` for the VeloxPay payment-link product.
 
 ## Running locally
 
@@ -67,10 +67,10 @@ Root directory:
 
 Required environment variables:
 - `ARC_RPC=https://rpc.testnet.arc.network`
-- `FRONTEND_ORIGIN=https://your-vite-frontend.vercel.app,https://your-next-frontend.vercel.app`
+- `FRONTEND_ORIGIN=https://arc-wallet.vercel.app,https://veloxpay.vercel.app`
 - `PAYMENT_LINK_OWNER_EMAIL=your-owner-email@example.com`
 - `PAYMENT_LINK_OWNER_USERNAME=emmanuel`
-- `PAYMENT_LINK_BASE_URL=https://your-next-frontend.vercel.app`
+- `PAYMENT_LINK_BASE_URL=https://veloxpay.vercel.app`
 - `PAYMENT_LINK_DEFAULT_CURRENCY=USDC`
 
 ### Frontend project
@@ -79,7 +79,7 @@ Root directory:
 - `frontend`
 
 Required environment variable:
-- `VITE_API_BASE_URL=https://your-backend-domain.vercel.app`
+- `VITE_API_BASE_URL=https://arc-invisible-wallet.vercel.app`
 
 ### Next.js payment-links project
 
@@ -87,7 +87,12 @@ Root directory:
 - `next-frontend`
 
 Required environment variable:
-- `BACKEND_API_URL=https://your-backend-domain.vercel.app`
+- `BACKEND_API_URL=https://arc-invisible-wallet.vercel.app`
+
+Current deployed URLs:
+- Wallet app: `https://arc-wallet.vercel.app/`
+- VeloxPay: `https://veloxpay.vercel.app/`
+- Backend: `https://arc-invisible-wallet.vercel.app/`
 
 After deployment:
 1. Copy the backend production URL.
@@ -109,3 +114,4 @@ To get Arc testnet USDC or EURC:
 
 - This is a demo implementation and should not be used in production.
 - The goal is to demonstrate invisible wallet UX with email-based access and recovery.
+- File-based storage on Vercel uses the writable `/tmp` runtime path, which is fine for demos but not durable storage for production data.

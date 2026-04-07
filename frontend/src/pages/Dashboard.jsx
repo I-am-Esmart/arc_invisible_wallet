@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { fetchBalances } from "../lib/api"
+import { API_BASE, fetchBalances } from "../lib/api"
 import { Link, useNavigate } from "react-router-dom"
 import FaucetInstructionsModal from "../components/FaucetInstructionsModal"
 import { TOKEN_OPTIONS } from "../lib/tokens"
@@ -63,7 +63,7 @@ export default function Dashboard() {
         <p>{error}</p>
         <p className="mt-4 text-sm text-gray-500">
           Make sure the backend is running and reachable at
-          <code className="block mt-1 bg-gray-100 p-2 rounded">http://localhost:4000</code>.
+          <code className="block mt-1 bg-gray-100 p-2 rounded">{API_BASE}</code>.
         </p>
       </div>
     )

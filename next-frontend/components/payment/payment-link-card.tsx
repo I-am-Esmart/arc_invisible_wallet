@@ -35,8 +35,7 @@ export function PaymentLinkCard({
           {formatMoney(paymentLink.amount, paymentLink.currency)}
         </div>
         <div className="mt-3 text-sm text-slate-500">
-          Enter your email and the backend will use the existing wallet flow to process
-          the payment.
+          Enter your email to continue with the payment.
         </div>
       </div>
 

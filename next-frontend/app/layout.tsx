@@ -3,8 +3,8 @@ import type { ReactNode } from "react";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Arc Payment Links",
-  description: "Create and share simple crypto payment links powered by your existing backend.",
+  title: "VeloxPay",
+  description: "Create payment links, share them in seconds, and get paid with a simple checkout experience.",
 };
 
 export default function RootLayout({

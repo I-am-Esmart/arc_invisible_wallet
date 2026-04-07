@@ -1,12 +1,13 @@
 import { useState } from "react"
 // import { Routes, Route, Link } from "react-router-dom"
-import { BrowserRouter, Routes, Route } from "react-router-dom"
+import { Link, Routes, Route } from "react-router-dom"
 import Send from "./pages/Send"
 import Transactions from "./pages/Transactions"
 import Dashboard from "./pages/Dashboard"
 import Receive from "./pages/Receive"
 import Login from "./pages/Login"
 import Restore from "./pages/Restore"
+import { createWallet as createWalletRequest, signMessage } from "./lib/api"
 
 // Move the main wallet logic into a separate Home component
 function Home() {
@@ -18,12 +19,7 @@ function Home() {
 
   const createWallet = async () => {
     try {
-      const res = await fetch("http://localhost:4000/create-wallet", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-      })
-
-      const data = await res.json()
+      const data = await createWalletRequest()
       setAddress(data.address)
       setArcKeyId(data.arcKeyId)
       setSignature("")
@@ -36,16 +32,10 @@ function Home() {
 
   const signMsg = async () => {
     try {
-      const res = await fetch("http://localhost:4000/sign-message", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message,
-          arcKeyId,
-        }),
+      const data = await signMessage({
+        message,
+        arcKeyId,
       })
-
-      const data = await res.json()
 
       if (data.error) {
         alert(data.error)

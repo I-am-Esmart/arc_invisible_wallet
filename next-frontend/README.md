@@ -1,6 +1,6 @@
-# Arc Payment Links Frontend
+# VeloxPay Frontend
 
-This is a separate Next.js App Router frontend for the payment-link product.
+This is the separate Next.js App Router frontend for the VeloxPay payment-link product.
 
 ## Run locally
 
@@ -9,6 +9,7 @@ This is a separate Next.js App Router frontend for the payment-link product.
 
 ```bash
 BACKEND_API_URL=http://localhost:4000
+NEXT_PUBLIC_BUILDER_X_URL=https://x.com/i_am_esmarts
 ```
 
 3. Install dependencies:
@@ -56,10 +57,10 @@ Set these environment variables:
 
 ```bash
 ARC_RPC=https://rpc.testnet.arc.network
-FRONTEND_ORIGIN=https://your-vite-frontend.vercel.app,https://your-next-frontend.vercel.app
+FRONTEND_ORIGIN=https://arc-wallet.vercel.app,https://veloxpay.vercel.app
 PAYMENT_LINK_OWNER_EMAIL=your-owner-email@example.com
 PAYMENT_LINK_OWNER_USERNAME=emmanuel
-PAYMENT_LINK_BASE_URL=https://your-next-frontend.vercel.app
+PAYMENT_LINK_BASE_URL=https://veloxpay.vercel.app
 PAYMENT_LINK_DEFAULT_CURRENCY=USDC
 ```
 
@@ -74,10 +75,16 @@ next-frontend
 Set:
 
 ```bash
-BACKEND_API_URL=https://your-backend.vercel.app
+BACKEND_API_URL=https://arc-invisible-wallet.vercel.app
+NEXT_PUBLIC_BUILDER_X_URL=https://x.com/i_am_esmarts
 ```
+
+Current deployed URLs:
+- VeloxPay: `https://veloxpay.vercel.app/`
+- Wallet app: `https://arc-wallet.vercel.app/`
+- Backend: `https://arc-invisible-wallet.vercel.app/`
 
 ## Notes
 
 - This frontend does not implement wallet or blockchain logic.
-- All payment execution stays in the existing Node.js backend.
+- File-based storage on Vercel uses `/tmp`, which is fine for demos but not durable enough for production data.

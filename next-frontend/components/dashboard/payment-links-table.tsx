@@ -15,7 +15,7 @@ export function PaymentLinksTable({
         <div>
           <h2 className="text-lg font-semibold text-slate-900">Payment links</h2>
           <p className="mt-1 text-sm text-slate-600">
-            All public links generated from the backend.
+            All public links generated for sharing.
           </p>
         </div>
       </div>
