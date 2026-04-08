@@ -4,12 +4,23 @@ import type { PaymentLink } from "@/lib/types/payment-link";
 type PaymentLinkPayload = {
   amount?: string;
   description?: string;
+  ownerEmail?: string;
+  ownerName?: string;
 };
 
-export async function getPaymentLinkByRoute(username: string, amount: string) {
+export async function getPaymentLinkByRoute(username: string, amount: string, linkId?: string) {
   try {
+    const params = new URLSearchParams({
+      username,
+      amount,
+    });
+
+    if (linkId) {
+      params.set("linkId", linkId);
+    }
+
     return await backendFetch<PaymentLink | null>(
-      `/payment-links/resolve?username=${encodeURIComponent(username)}&amount=${encodeURIComponent(amount)}`,
+      `/payment-links/resolve?${params.toString()}`,
     );
   } catch (error) {
     if (error instanceof BackendApiError && error.status === 404) {

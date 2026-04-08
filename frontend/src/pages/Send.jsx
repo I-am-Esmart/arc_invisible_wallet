@@ -4,6 +4,9 @@ import { useNavigate } from "react-router-dom"
 import { DEFAULT_TOKEN, TOKEN_OPTIONS } from "../lib/tokens"
 
 const ARC_EXPLORER_BASE = "https://testnet.arcscan.app/tx"
+const getExplorerUrl = (hash) => (
+  typeof hash === "string" && hash.startsWith("0x") ? `${ARC_EXPLORER_BASE}/${hash}` : ""
+)
 
 export default function Send() {
   const [to, setTo] = useState("")
@@ -45,7 +48,7 @@ export default function Send() {
         symbol: res.symbol || token,
         status: "confirmed",
         timestamp: Date.now(),
-        explorer: res.explorer || `${ARC_EXPLORER_BASE}/${res.hash}`,
+        explorer: getExplorerUrl(res.hash),
       }
       const existing = JSON.parse(localStorage.getItem("txs") || "[]")
       localStorage.setItem("txs", JSON.stringify([txRecord, ...existing]))
@@ -126,14 +129,16 @@ export default function Send() {
       {result?.hash && (
         <div className="mt-4 text-green-600 bg-green-50 p-3 rounded-lg">
           {result.symbol || token} transaction sent!
-          <a
-            href={result.explorer || `${ARC_EXPLORER_BASE}/${result.hash}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="block mt-2 underline"
-          >
-            View on Arc Explorer
-          </a>
+          {getExplorerUrl(result.hash) ? (
+            <a
+              href={getExplorerUrl(result.hash)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block mt-2 underline"
+            >
+              View on Arc Explorer
+            </a>
+          ) : null}
         </div>
       )}
     </div>

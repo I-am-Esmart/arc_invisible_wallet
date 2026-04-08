@@ -3,5 +3,6 @@
   "wallets": {},
   "txs": [],
   "paymentLinks": [],
-  "payments": []
+  "payments": [],
+  "paymentAuthSessions": []
 }

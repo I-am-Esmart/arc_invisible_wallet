@@ -3,6 +3,9 @@ import { sendTransaction } from "../lib/api"
 import { DEFAULT_TOKEN, TOKEN_OPTIONS } from "../lib/tokens"
 
 const ARC_EXPLORER_BASE = "https://testnet.arcscan.app/tx"
+const getExplorerUrl = (hash) => (
+  typeof hash === "string" && hash.startsWith("0x") ? `${ARC_EXPLORER_BASE}/${hash}` : ""
+)
 
 export default function SendTransactionCard() {
   const [to, setTo] = useState("")
@@ -44,7 +47,7 @@ export default function SendTransactionCard() {
         symbol: res.symbol || token,
         status: "confirmed",
         timestamp: Date.now(),
-        explorer: res.explorer || `${ARC_EXPLORER_BASE}/${res.hash}`,
+        explorer: getExplorerUrl(res.hash),
       }
       const existing = JSON.parse(localStorage.getItem("txs") || "[]")
       localStorage.setItem("txs", JSON.stringify([txRecord, ...existing]))
@@ -97,14 +100,16 @@ export default function SendTransactionCard() {
         {result && (
           <div className="p-3 bg-green-50 text-green-600 rounded-lg text-sm">
             {result.symbol || token} transaction sent!
-            <a
-              href={result.explorer || `${ARC_EXPLORER_BASE}/${result.hash}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="block text-blue-600 hover:underline font-mono text-xs mt-1"
-            >
-              View on Arc Explorer
-            </a>
+            {getExplorerUrl(result.hash) ? (
+              <a
+                href={getExplorerUrl(result.hash)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block text-blue-600 hover:underline font-mono text-xs mt-1"
+              >
+                View on Arc Explorer
+              </a>
+            ) : null}
           </div>
         )}
 

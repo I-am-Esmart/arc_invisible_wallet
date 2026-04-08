@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { API_BASE, fetchBalances } from "../lib/api"
-import { Link, useNavigate } from "react-router-dom"
+import { Link, useLocation, useNavigate } from "react-router-dom"
 import FaucetInstructionsModal from "../components/FaucetInstructionsModal"
 import { TOKEN_OPTIONS } from "../lib/tokens"
 
@@ -16,6 +16,7 @@ function formatTokenBalance(balance) {
 
 export default function Dashboard() {
   const navigate = useNavigate()
+  const location = useLocation()
   const [wallet, setWallet] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
@@ -27,6 +28,7 @@ export default function Dashboard() {
   }
 
   const user = JSON.parse(localStorage.getItem("user"))
+  const returnTo = new URLSearchParams(location.search).get("returnTo")
 
   useEffect(() => {
     if (!user) {
@@ -72,7 +74,12 @@ export default function Dashboard() {
   return (
     <div className="max-w-3xl mx-auto mt-10 p-6">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-blue-600">Wallet Dashboard</h1>
+        <div>
+          <h1 className="text-2xl font-bold text-blue-600">Wallet Dashboard</h1>
+          {user?.displayName && (
+            <p className="mt-1 text-sm text-gray-500">Welcome back, {user.displayName}</p>
+          )}
+        </div>
         <button
           onClick={handleLogout}
           className="text-sm font-semibold text-red-600 hover:text-red-800 cursor-pointer"
@@ -80,6 +87,19 @@ export default function Dashboard() {
           Logout
         </button>
       </div>
+
+      {returnTo && (
+        <div className="mb-6 rounded-2xl bg-blue-50 p-4 text-sm text-blue-700">
+          Your wallet is ready. Add faucet funds if needed, then continue back to VeloxPay
+          to finish the payment.
+          <a
+            href={returnTo}
+            className="ml-2 font-semibold underline"
+          >
+            Return to VeloxPay
+          </a>
+        </div>
+      )}
 
       <div className="bg-white rounded-2xl shadow p-6 mb-6">
         <p className="text-sm text-gray-500">Wallet</p>

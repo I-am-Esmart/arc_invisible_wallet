@@ -10,5 +10,6 @@ export type Payment = {
   currency: PaymentCurrency;
   status: PaymentStatus;
   transactionHash?: string;
+  explorerUrl?: string;
   paidAt?: string;
 };

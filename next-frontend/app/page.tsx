@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 
-const BUILDER_X_URL = process.env.NEXT_PUBLIC_BUILDER_X_URL || "https://x.com/i_am_esmarts";
+const BUILDER_X_URL = process.env.NEXT_PUBLIC_BUILDER_X_URL || "https://x.com/cryptosmart121";
 
 function XLogo() {
   return (
@@ -65,7 +65,7 @@ export default function HomePage() {
                 Example payment link
               </div>
               <div className="mt-3 break-all text-lg font-medium">
-                veloxpay.vercel.app/emmanuel/500
+                veloxpay.vercel.app/smart/500/a1b2c3d4
               </div>
             </div>
 

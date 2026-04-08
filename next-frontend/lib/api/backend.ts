@@ -3,11 +3,13 @@ const BACKEND_API_URL =
 
 export class BackendApiError extends Error {
   status: number;
+  payload?: Record<string, unknown> | null;
 
-  constructor(message: string, status: number) {
+  constructor(message: string, status: number, payload?: Record<string, unknown> | null) {
     super(message);
     this.name = "BackendApiError";
     this.status = status;
+    this.payload = payload;
   }
 }
 
@@ -45,6 +47,7 @@ export async function backendFetch<T>(path: string, init?: RequestInit): Promise
       (data as { error?: string } | null)?.error ||
         `Backend request failed with status ${response.status}`,
       response.status,
+      (data as Record<string, unknown> | null) || null,
     );
   }
 

@@ -49,7 +49,18 @@ export function PaymentsTable({ payments }: { payments: Payment[] }) {
                   </td>
                   <td className="py-4 pr-6 text-slate-500">
                     {payment.transactionHash ? (
-                      <span className="font-mono text-xs">{payment.transactionHash}</span>
+                      payment.explorerUrl ? (
+                        <a
+                          href={payment.explorerUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="font-mono text-xs text-brand-600 hover:underline"
+                        >
+                          {payment.transactionHash}
+                        </a>
+                      ) : (
+                        <span className="font-mono text-xs">{payment.transactionHash}</span>
+                      )
                     ) : (
                       "-"
                     )}

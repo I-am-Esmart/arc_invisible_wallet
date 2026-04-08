@@ -45,11 +45,11 @@ export async function fetchBalances(address) {
   return handleResponse(res)
 }
 
-export async function login(email) {
+export async function login(email, displayName) {
   const res = await fetch(`${API_BASE}/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email }),
+    body: JSON.stringify({ email, displayName }),
   })
   return handleResponse(res)
 }

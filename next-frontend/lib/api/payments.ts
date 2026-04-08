@@ -1,13 +1,33 @@
 import { backendFetch } from "./backend";
 import type { Payment } from "@/lib/types/payment";
 
+type PaymentChallenge = {
+  challengeId: string;
+  payerEmail: string;
+  message: string;
+};
+
 export async function listPayments() {
   return backendFetch<Payment[]>("/payments");
 }
 
-export async function initiatePaymentForLink(linkId: string, payerEmail: string) {
-  return backendFetch<Payment>(`/payment-links/${encodeURIComponent(linkId)}/pay`, {
+export async function startPaymentForLink(linkId: string, payerEmail: string) {
+  return backendFetch<PaymentChallenge>(`/payment-links/${encodeURIComponent(linkId)}/send-code`, {
     method: "POST",
     body: JSON.stringify({ payerEmail }),
+  });
+}
+
+export async function confirmPaymentForLink(
+  linkId: string,
+  payload: {
+    payerEmail: string;
+    verificationCode: string;
+    challengeId: string;
+  },
+) {
+  return backendFetch<Payment>(`/payment-links/${encodeURIComponent(linkId)}/confirm-payment`, {
+    method: "POST",
+    body: JSON.stringify(payload),
   });
 }

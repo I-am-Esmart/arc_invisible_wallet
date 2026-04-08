@@ -40,8 +40,11 @@ export function PaymentLinksTable({
               {paymentLinks.map((link) => (
                 <tr key={link.id}>
                   <td className="py-4 pr-6">
-                    <Link href={`/${link.username}/${link.amount}`} className="font-medium text-slate-900">
-                      /{link.username}/{link.amount}
+                    <Link
+                      href={link.linkCode ? `/${link.username}/${link.amount}/${link.linkCode}` : `/${link.username}/${link.amount}`}
+                      className="font-medium text-slate-900"
+                    >
+                      {link.linkCode ? `/${link.username}/${link.amount}/${link.linkCode}` : `/${link.username}/${link.amount}`}
                     </Link>
                   </td>
                   <td className="py-4 pr-6 text-slate-700">

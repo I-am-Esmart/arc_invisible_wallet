@@ -1,16 +1,20 @@
 import { useEffect, useState } from "react"
-import { Link, useNavigate } from "react-router-dom"
+import { Link, useNavigate, useSearchParams } from "react-router-dom"
 import { checkHealth, login as backendLogin } from "../lib/api"
 import RestoreInstructionsModal from "../components/RestoreInstructionsModal"
 
 export default function Login() {
+  const [searchParams] = useSearchParams()
   const [email, setEmail] = useState("")
+  const [displayName, setDisplayName] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [backendError, setBackendError] = useState("")
   const [checkingBackend, setCheckingBackend] = useState(false)
   const [showInstructions, setShowInstructions] = useState(false)
   const navigate = useNavigate()
+  const source = searchParams.get("source")
+  const returnTo = searchParams.get("returnTo")
 
   useEffect(() => {
     const user = JSON.parse(localStorage.getItem("user"))
@@ -37,6 +41,19 @@ export default function Login() {
     checkBackend()
   }, [])
 
+  useEffect(() => {
+    const emailFromLink = searchParams.get("email")
+    const savedName = localStorage.getItem("walletDisplayName") || ""
+
+    if (emailFromLink) {
+      setEmail(emailFromLink)
+    }
+
+    if (savedName) {
+      setDisplayName(savedName)
+    }
+  }, [searchParams])
+
   async function handleLogin() {
     setLoading(true)
     setError("")
@@ -48,9 +65,16 @@ export default function Login() {
     }
 
     try {
-      const data = await backendLogin(email)
+      const data = await backendLogin(email, displayName)
       localStorage.setItem("user", JSON.stringify(data))
-      navigate("/dashboard")
+      if (data?.displayName) {
+        localStorage.setItem("walletDisplayName", data.displayName)
+      }
+
+      const target = returnTo
+        ? `/dashboard?returnTo=${encodeURIComponent(returnTo)}`
+        : "/dashboard"
+      navigate(target)
     } catch (err) {
       setError(err.message || "Login failed")
     } finally {
@@ -64,6 +88,21 @@ export default function Login() {
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-blue-600">Arc Wallet Login</h1>
         </div>
+
+        {source === "veloxpay" && (
+          <div className="mb-4 rounded-xl bg-blue-50 p-3 text-sm text-blue-700">
+            Create your wallet to continue your VeloxPay payment. We&apos;ll use this
+            email to restore your wallet any time you come back.
+          </div>
+        )}
+
+        <input
+          type="text"
+          placeholder="Your name"
+          className="w-full p-3 border rounded-xl mb-4"
+          value={displayName}
+          onChange={(e) => setDisplayName(e.target.value)}
+        />
 
         <input
           type="email"
@@ -114,6 +153,13 @@ export default function Login() {
               {checkingBackend ? "Retrying..." : "Retry connection"}
             </button>
           </div>
+        )}
+
+        {returnTo && (
+          <p className="mt-4 text-xs text-gray-500">
+            After your wallet is ready, we&apos;ll take you back so you can complete your
+            payment.
+          </p>
         )}
       </div>
 

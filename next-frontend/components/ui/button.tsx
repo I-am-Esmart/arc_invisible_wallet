@@ -2,17 +2,15 @@ import Link from "next/link";
 import {
   cloneElement,
   isValidElement,
+  type ButtonHTMLAttributes,
   type ReactElement,
   type ReactNode,
 } from "react";
 
-type ButtonProps = {
+type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   children: ReactNode;
   className?: string;
   variant?: "primary" | "secondary" | "ghost";
-  type?: "button" | "submit" | "reset";
-  disabled?: boolean;
-  onClick?: () => void;
   asChild?: boolean;
 };
 
@@ -35,8 +33,8 @@ export function Button({
   variant = "primary",
   type = "button",
   disabled,
-  onClick,
   asChild = false,
+  ...buttonProps
 }: ButtonProps) {
   const classes = `${getButtonClasses(variant)} ${className || ""}`.trim();
 
@@ -54,7 +52,7 @@ export function Button({
   }
 
   return (
-    <button type={type} disabled={disabled} onClick={onClick} className={classes}>
+    <button type={type} disabled={disabled} className={classes} {...buttonProps}>
       {children}
     </button>
   );

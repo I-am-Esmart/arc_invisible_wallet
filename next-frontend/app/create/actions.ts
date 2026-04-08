@@ -14,6 +14,8 @@ export async function createPaymentLinkAction(
 ): Promise<CreateLinkActionState> {
   const amount = String(formData.get("amount") || "").trim();
   const description = String(formData.get("description") || "").trim();
+  const ownerEmail = String(formData.get("ownerEmail") || "").trim();
+  const ownerName = String(formData.get("ownerName") || "").trim();
 
   if (!amount) {
     return {
@@ -29,10 +31,19 @@ export async function createPaymentLinkAction(
     };
   }
 
+  if (!ownerEmail) {
+    return {
+      status: "error",
+      message: "Your wallet email is required.",
+    };
+  }
+
   try {
     const paymentLink = await createPaymentLink({
       amount,
       description: description || undefined,
+      ownerEmail,
+      ownerName: ownerName || undefined,
     });
 
     return {

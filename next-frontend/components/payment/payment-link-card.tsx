@@ -12,6 +12,8 @@ export function PaymentLinkCard({
   paymentLink: PaymentLink;
   payAction: (state: PayActionState, formData: FormData) => Promise<PayActionState>;
 }) {
+  const payeeName = paymentLink.ownerName || paymentLink.username;
+
   return (
     <Card className="p-8 sm:p-10">
       <div className="flex flex-wrap items-center gap-3">
@@ -22,7 +24,7 @@ export function PaymentLinkCard({
       </div>
 
       <h1 className="mt-6 text-3xl font-semibold tracking-tight text-slate-900">
-        Send money to {paymentLink.username}
+        Send money to {payeeName}
       </h1>
 
       <p className="mt-4 text-base leading-7 text-slate-600">
@@ -35,12 +37,12 @@ export function PaymentLinkCard({
           {formatMoney(paymentLink.amount, paymentLink.currency)}
         </div>
         <div className="mt-3 text-sm text-slate-500">
-          Enter your email to continue with the payment.
+          Enter your email and confirm the one-time code we send before the payment goes through.
         </div>
       </div>
 
       <div className="mt-8">
-        <PayButton action={payAction} username={paymentLink.username} />
+        <PayButton action={payAction} username={payeeName} />
       </div>
     </Card>
   );

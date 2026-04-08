@@ -9,7 +9,11 @@ function getStoredTxs() {
 }
 
 function getExplorerUrl(tx) {
-  return tx.explorer || `${ARC_EXPLORER_BASE}/${tx.hash}`
+  if (typeof tx.hash === "string" && tx.hash.startsWith("0x")) {
+    return `${ARC_EXPLORER_BASE}/${tx.hash}`
+  }
+
+  return tx.explorer
 }
 
 export default function Transactions() {
@@ -83,14 +87,20 @@ export default function Transactions() {
             className="bg-white border rounded-xl p-4 shadow-sm"
           >
             <div className="flex justify-between items-center mb-2">
-              <a
-                href={getExplorerUrl(tx)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="font-mono text-sm text-blue-600 hover:underline"
-              >
-                {tx.hash.slice(0, 10)}...{tx.hash.slice(-8)}
-              </a>
+              {getExplorerUrl(tx) ? (
+                <a
+                  href={getExplorerUrl(tx)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-mono text-sm text-blue-600 hover:underline"
+                >
+                  {tx.hash.slice(0, 10)}...{tx.hash.slice(-8)}
+                </a>
+              ) : (
+                <span className="font-mono text-sm text-gray-500">
+                  {tx.hash.slice(0, 10)}...{tx.hash.slice(-8)}
+                </span>
+              )}
               <span className="text-green-600 font-medium">{tx.status}</span>
             </div>
 

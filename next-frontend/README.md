@@ -9,7 +9,7 @@ This is the separate Next.js App Router frontend for the VeloxPay payment-link p
 
 ```bash
 BACKEND_API_URL=http://localhost:4000
-NEXT_PUBLIC_BUILDER_X_URL=https://x.com/i_am_esmarts
+NEXT_PUBLIC_BUILDER_X_URL=https://x.com/cryptosmart121
 ```
 
 3. Install dependencies:
@@ -32,7 +32,8 @@ The Next app runs on `http://localhost:3000`.
 - `GET /payment-links`
 - `POST /payment-links`
 - `GET /payments`
-- `POST /payment-links/:linkId/pay`
+- `POST /payment-links/:linkId/send-code`
+- `POST /payment-links/:linkId/confirm-payment`
 
 ## Required backend env for payment links
 
@@ -41,6 +42,9 @@ PAYMENT_LINK_OWNER_EMAIL=emmanuel@example.com
 PAYMENT_LINK_OWNER_USERNAME=emmanuel
 PAYMENT_LINK_BASE_URL=http://localhost:3000
 PAYMENT_LINK_DEFAULT_CURRENCY=USDC
+WALLET_APP_BASE_URL=https://arc-wallet.vercel.app
+RESEND_API_KEY=re_xxxxxxxxx
+OTP_FROM_EMAIL=VeloxPay <onboarding@resend.dev>
 ```
 
 ## Vercel deployment
@@ -62,6 +66,9 @@ PAYMENT_LINK_OWNER_EMAIL=your-owner-email@example.com
 PAYMENT_LINK_OWNER_USERNAME=emmanuel
 PAYMENT_LINK_BASE_URL=https://veloxpay.vercel.app
 PAYMENT_LINK_DEFAULT_CURRENCY=USDC
+WALLET_APP_BASE_URL=https://arc-wallet.vercel.app
+RESEND_API_KEY=re_xxxxxxxxx
+OTP_FROM_EMAIL=VeloxPay <your-verified-sender@domain.com>
 ```
 
 ### Next frontend project
@@ -76,7 +83,7 @@ Set:
 
 ```bash
 BACKEND_API_URL=https://arc-invisible-wallet.vercel.app
-NEXT_PUBLIC_BUILDER_X_URL=https://x.com/i_am_esmarts
+NEXT_PUBLIC_BUILDER_X_URL=https://x.com/cryptosmart121
 ```
 
 Current deployed URLs:
@@ -88,3 +95,4 @@ Current deployed URLs:
 
 - This frontend does not implement wallet or blockchain logic.
 - File-based storage on Vercel uses `/tmp`, which is fine for demos but not durable enough for production data.
+- Payments now use one-time email verification, so the backend must be configured with a working Resend sender before live testing.
