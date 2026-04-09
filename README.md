@@ -26,8 +26,12 @@ Important backend env values:
 - `PAYMENT_LINK_BASE_URL=http://localhost:3000`
 - `PAYMENT_LINK_DEFAULT_CURRENCY=USDC`
 - `WALLET_APP_BASE_URL=https://arc-wallet.vercel.app`
-- `RESEND_API_KEY=re_xxxxxxxxx`
-- `OTP_FROM_EMAIL=VeloxPay <onboarding@resend.dev>`
+- `SMTP_HOST=smtp.gmail.com`
+- `SMTP_PORT=465`
+- `SMTP_SECURE=true`
+- `SMTP_USER=useveloxpay@gmail.com`
+- `SMTP_PASS=your-16-character-google-app-password`
+- `OTP_FROM_EMAIL="VeloxPay <useveloxpay@gmail.com>"`
 
 You can copy `backend/server/.env.example` to `.env` and adjust values if needed.
 
@@ -76,8 +80,12 @@ Required environment variables:
 - `PAYMENT_LINK_BASE_URL=https://veloxpay.vercel.app`
 - `PAYMENT_LINK_DEFAULT_CURRENCY=USDC`
 - `WALLET_APP_BASE_URL=https://arc-wallet.vercel.app`
-- `RESEND_API_KEY=re_xxxxxxxxx`
-- `OTP_FROM_EMAIL=VeloxPay <your-verified-sender@domain.com>`
+- `SMTP_HOST=smtp.gmail.com`
+- `SMTP_PORT=465`
+- `SMTP_SECURE=true`
+- `SMTP_USER=useveloxpay@gmail.com`
+- `SMTP_PASS=your-16-character-google-app-password`
+- `OTP_FROM_EMAIL="VeloxPay <useveloxpay@gmail.com>"`
 
 ### Frontend project
 
@@ -122,4 +130,4 @@ To get Arc testnet USDC or EURC:
 - This is a demo implementation and should not be used in production.
 - The goal is to demonstrate invisible wallet UX with email-based access and recovery.
 - File-based storage on Vercel uses the writable `/tmp` runtime path, which is fine for demos but not durable storage for production data.
-- Payment approvals on VeloxPay now rely on one-time email verification. Add the Resend env values above before testing the pay flow in production.
+- Payment approvals on VeloxPay now rely on one-time email verification. For your current setup you can use Gmail SMTP with an app password; Resend can stay as an optional fallback for later.

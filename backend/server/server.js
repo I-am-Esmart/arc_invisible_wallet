@@ -5,6 +5,7 @@ const { ethers } = require("ethers");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
+const nodemailer = require("nodemailer");
 
 const ERC20_ABI = [
   "function balanceOf(address owner) view returns (uint256)",
@@ -259,11 +260,57 @@ function getStoredUser(store, email) {
 }
 
 async function sendVerificationCodeEmail({ to, code, paymentLink }) {
-  const apiKey = process.env.RESEND_API_KEY;
-  const from = process.env.OTP_FROM_EMAIL;
+  const subject = `${code} is your VeloxPay verification code`;
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 520px; margin: 0 auto; color: #0f172a;">
+      <p style="font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; color: #2563eb;">VeloxPay</p>
+      <h1 style="font-size: 24px; margin-bottom: 12px;">Confirm your payment</h1>
+      <p style="font-size: 15px; line-height: 1.6; color: #475569;">
+        Use this verification code to approve your payment of
+        <strong>${escapeHtml(paymentLink.amount)} ${escapeHtml(paymentLink.currency)}</strong>
+        to <strong>${escapeHtml(paymentLink.ownerName || paymentLink.username)}</strong>.
+      </p>
+      <div style="margin: 24px 0; padding: 18px 22px; border-radius: 16px; background: #eff6ff; font-size: 30px; font-weight: 700; letter-spacing: 0.28em; color: #1d4ed8; text-align: center;">
+        ${escapeHtml(code)}
+      </div>
+      <p style="font-size: 14px; line-height: 1.6; color: #64748b;">
+        This code expires in ${OTP_CODE_TTL_MINUTES} minutes. If you did not request this payment, you can ignore this email.
+      </p>
+    </div>
+  `;
 
-  if (!apiKey || !from) {
-    throw new Error("Email verification is not configured yet. Add RESEND_API_KEY and OTP_FROM_EMAIL.");
+  const smtpUser = normalizeEmail(process.env.SMTP_USER);
+  const smtpPass = process.env.SMTP_PASS;
+  const smtpHost = process.env.SMTP_HOST || "smtp.gmail.com";
+  const smtpPort = Number(process.env.SMTP_PORT || 465);
+  const smtpSecure = String(process.env.SMTP_SECURE || "true").toLowerCase() !== "false";
+  const smtpFrom = process.env.OTP_FROM_EMAIL || process.env.SMTP_FROM_EMAIL || smtpUser;
+
+  if (smtpUser && smtpPass && smtpFrom) {
+    const transporter = nodemailer.createTransport({
+      host: smtpHost,
+      port: smtpPort,
+      secure: smtpSecure,
+      auth: {
+        user: smtpUser,
+        pass: smtpPass
+      }
+    });
+
+    await transporter.sendMail({
+      from: smtpFrom,
+      to,
+      subject,
+      html
+    });
+    return;
+  }
+
+  const apiKey = process.env.RESEND_API_KEY;
+  const resendFrom = process.env.OTP_FROM_EMAIL;
+
+  if (!apiKey || !resendFrom) {
+    throw new Error("Email verification is not configured yet. Add Gmail SMTP env vars or RESEND_API_KEY and OTP_FROM_EMAIL.");
   }
 
   const response = await fetch(RESEND_API_URL, {
@@ -273,26 +320,10 @@ async function sendVerificationCodeEmail({ to, code, paymentLink }) {
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
-      from,
+      from: resendFrom,
       to: [to],
-      subject: `${code} is your VeloxPay verification code`,
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 520px; margin: 0 auto; color: #0f172a;">
-          <p style="font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; color: #2563eb;">VeloxPay</p>
-          <h1 style="font-size: 24px; margin-bottom: 12px;">Confirm your payment</h1>
-          <p style="font-size: 15px; line-height: 1.6; color: #475569;">
-            Use this verification code to approve your payment of
-            <strong>${escapeHtml(paymentLink.amount)} ${escapeHtml(paymentLink.currency)}</strong>
-            to <strong>${escapeHtml(paymentLink.ownerName || paymentLink.username)}</strong>.
-          </p>
-          <div style="margin: 24px 0; padding: 18px 22px; border-radius: 16px; background: #eff6ff; font-size: 30px; font-weight: 700; letter-spacing: 0.28em; color: #1d4ed8; text-align: center;">
-            ${escapeHtml(code)}
-          </div>
-          <p style="font-size: 14px; line-height: 1.6; color: #64748b;">
-            This code expires in ${OTP_CODE_TTL_MINUTES} minutes. If you did not request this payment, you can ignore this email.
-          </p>
-        </div>
-      `
+      subject,
+      html
     })
   });
 

@@ -43,8 +43,12 @@ PAYMENT_LINK_OWNER_USERNAME=emmanuel
 PAYMENT_LINK_BASE_URL=http://localhost:3000
 PAYMENT_LINK_DEFAULT_CURRENCY=USDC
 WALLET_APP_BASE_URL=https://arc-wallet.vercel.app
-RESEND_API_KEY=re_xxxxxxxxx
-OTP_FROM_EMAIL=VeloxPay <onboarding@resend.dev>
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=465
+SMTP_SECURE=true
+SMTP_USER=useveloxpay@gmail.com
+SMTP_PASS=your-16-character-google-app-password
+OTP_FROM_EMAIL="VeloxPay <useveloxpay@gmail.com>"
 ```
 
 ## Vercel deployment
@@ -67,8 +71,12 @@ PAYMENT_LINK_OWNER_USERNAME=emmanuel
 PAYMENT_LINK_BASE_URL=https://veloxpay.vercel.app
 PAYMENT_LINK_DEFAULT_CURRENCY=USDC
 WALLET_APP_BASE_URL=https://arc-wallet.vercel.app
-RESEND_API_KEY=re_xxxxxxxxx
-OTP_FROM_EMAIL=VeloxPay <your-verified-sender@domain.com>
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=465
+SMTP_SECURE=true
+SMTP_USER=useveloxpay@gmail.com
+SMTP_PASS=your-16-character-google-app-password
+OTP_FROM_EMAIL="VeloxPay <useveloxpay@gmail.com>"
 ```
 
 ### Next frontend project
@@ -95,4 +103,4 @@ Current deployed URLs:
 
 - This frontend does not implement wallet or blockchain logic.
 - File-based storage on Vercel uses `/tmp`, which is fine for demos but not durable enough for production data.
-- Payments now use one-time email verification, so the backend must be configured with a working Resend sender before live testing.
+- Payments now use one-time email verification, and for your current setup you can use Gmail SMTP with an app password instead of buying a domain first.
