@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import { ThemeToggle } from "@/components/theme/theme-toggle";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -17,6 +18,9 @@ export default function RootLayout({
       <body>
         <div className="min-h-screen">
           <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
+            <div className="mb-6 flex justify-end">
+              <ThemeToggle />
+            </div>
             {children}
           </div>
         </div>

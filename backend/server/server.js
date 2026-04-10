@@ -918,16 +918,6 @@ app.post("/payment-links/:linkId/send-code", async (req, res) => {
       return res.status(400).json({ error: "Payer email is required" });
     }
 
-    const payer = getStoredUser(store, payerEmail);
-
-    if (!payer) {
-      return res.status(404).json({
-        error: "We couldn't find a wallet for this email yet.",
-        code: "wallet_not_found",
-        createWalletUrl: buildWalletCreateUrl(payerEmail, paymentLink)
-      });
-    }
-
     const code = generateOtpCode();
     const expiresAt = new Date(Date.now() + OTP_CODE_TTL_MINUTES * 60 * 1000).toISOString();
     const challengeId = buildPaymentChallengeToken({
@@ -994,16 +984,6 @@ app.post("/payment-links/:linkId/confirm-payment", async (req, res) => {
 
   if (challenge.codeHash !== hashOtpCode(verificationCode)) {
     return res.status(400).json({ error: "Incorrect verification code." });
-  }
-
-  const payer = getStoredUser(store, payerEmail);
-
-  if (!payer) {
-    return res.status(404).json({
-      error: "We couldn't find a wallet for this email yet.",
-      code: "wallet_not_found",
-      createWalletUrl: buildWalletCreateUrl(payerEmail, paymentLink)
-    });
   }
 
   const paymentId = crypto.randomUUID();

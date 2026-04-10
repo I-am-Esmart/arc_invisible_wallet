@@ -7,6 +7,7 @@ import Dashboard from "./pages/Dashboard"
 import Receive from "./pages/Receive"
 import Login from "./pages/Login"
 import Restore from "./pages/Restore"
+import ThemeToggle from "./components/ThemeToggle"
 import { createWallet as createWalletRequest, signMessage } from "./lib/api"
 
 // Move the main wallet logic into a separate Home component
@@ -106,17 +107,18 @@ function Home() {
 // Main App component handling the Router
 export default function App() {
   return (
-    // <BrowserRouter>
-    <Routes>
-      {/* <Route path="/home" element={<Home />} /> */}
-      <Route path="/send" element={<Send />} />
-      <Route path="/transactions" element={<Transactions />} />
-      <Route path="/" element={<Login />} />
-      <Route path="/restore" element={<Restore />} />
-      <Route path="/dashboard" element={<Dashboard />} />
-      <Route path="/receive" element={<Receive />} />
-    </Routes>
-    // </BrowserRouter>
+    <>
+      <ThemeToggle />
+      <Routes>
+        {/* <Route path="/home" element={<Home />} /> */}
+        <Route path="/send" element={<Send />} />
+        <Route path="/transactions" element={<Transactions />} />
+        <Route path="/" element={<Login />} />
+        <Route path="/restore" element={<Restore />} />
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/receive" element={<Receive />} />
+      </Routes>
+    </>
   )
 }
 

@@ -6,10 +6,63 @@
   color-scheme: light;
 }
 
+html.dark {
+  color-scheme: dark;
+}
+
 body {
   @apply bg-slate-50 text-slate-900 antialiased;
 }
 
 a {
   @apply text-brand-600;
+}
+
+html.dark body {
+  background: #020617;
+  color: #e2e8f0;
+}
+
+html.dark .bg-white,
+html.dark .bg-white\/85,
+html.dark .bg-white\/90 {
+  background-color: #0f172a !important;
+}
+
+html.dark .bg-slate-50,
+html.dark .bg-slate-100,
+html.dark .bg-brand-50 {
+  background-color: #111827 !important;
+}
+
+html.dark .text-slate-950,
+html.dark .text-slate-900,
+html.dark .text-slate-800 {
+  color: #f8fafc !important;
+}
+
+html.dark .text-slate-700,
+html.dark .text-slate-600,
+html.dark .text-slate-500,
+html.dark .text-slate-400 {
+  color: #cbd5e1 !important;
+}
+
+html.dark .border-slate-200,
+html.dark .border-slate-300,
+html.dark .ring-slate-200 {
+  border-color: #334155 !important;
+  --tw-ring-color: #334155 !important;
+}
+
+html.dark input,
+html.dark textarea,
+html.dark select {
+  background-color: #0f172a !important;
+  color: #f8fafc !important;
+  border-color: #334155 !important;
+}
+
+html.dark .bg-\[radial-gradient\(circle_at_top_left\,_rgba\(37\,99\,235\,0\.18\)\,_transparent_28\%\)\,linear-gradient\(135deg\,_\#ffffff\,_\#f8fbff_45\%\,_\#eef5ff\)\] {
+  background: linear-gradient(135deg, #0f172a, #111827 45%, #172554) !important;
 }
