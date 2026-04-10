@@ -23,7 +23,7 @@ export default async function PaymentLinkPage({ params }: PaymentLinkPageProps) 
     <main className="mx-auto max-w-2xl">
       <PaymentLinkCard
         paymentLink={paymentLink}
-        payAction={payForPaymentLink.bind(null, paymentLink.id)}
+        payAction={payForPaymentLink.bind(null, paymentLink.linkCode || paymentLink.id)}
       />
     </main>
   );

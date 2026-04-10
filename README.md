@@ -25,6 +25,7 @@ Important backend env values:
 - `PAYMENT_LINK_OWNER_USERNAME=emmanuel`
 - `PAYMENT_LINK_BASE_URL=http://localhost:3000`
 - `PAYMENT_LINK_DEFAULT_CURRENCY=USDC`
+- `PAYMENT_LINK_SIGNING_SECRET=change-this-to-a-random-secret`
 - `WALLET_APP_BASE_URL=https://arc-wallet.vercel.app`
 - `SMTP_HOST=smtp.gmail.com`
 - `SMTP_PORT=465`
@@ -79,6 +80,7 @@ Required environment variables:
 - `PAYMENT_LINK_OWNER_USERNAME=emmanuel`
 - `PAYMENT_LINK_BASE_URL=https://veloxpay.vercel.app`
 - `PAYMENT_LINK_DEFAULT_CURRENCY=USDC`
+- `PAYMENT_LINK_SIGNING_SECRET=change-this-to-a-random-secret`
 - `WALLET_APP_BASE_URL=https://arc-wallet.vercel.app`
 - `SMTP_HOST=smtp.gmail.com`
 - `SMTP_PORT=465`

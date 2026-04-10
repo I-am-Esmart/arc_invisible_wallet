@@ -36,6 +36,7 @@ const DEFAULT_OWNER_EMAIL = process.env.PAYMENT_LINK_OWNER_EMAIL || "emmanuel@ex
 const DEFAULT_LINK_CURRENCY = (process.env.PAYMENT_LINK_DEFAULT_CURRENCY || "USDC").toUpperCase();
 const DEFAULT_LINK_BASE_URL = (process.env.PAYMENT_LINK_BASE_URL || "http://localhost:3000").replace(/\/$/, "");
 const WALLET_APP_BASE_URL = (process.env.WALLET_APP_BASE_URL || "https://arc-wallet.vercel.app").replace(/\/$/, "");
+const PAYMENT_LINK_SIGNING_SECRET = process.env.PAYMENT_LINK_SIGNING_SECRET || "veloxpay-demo-secret";
 const OTP_CODE_TTL_MINUTES = Math.max(1, Number(process.env.OTP_CODE_TTL_MINUTES || 10));
 const OTP_MAX_ATTEMPTS = Math.max(1, Number(process.env.OTP_MAX_ATTEMPTS || 5));
 const RESEND_API_URL = "https://api.resend.com/emails";
@@ -107,6 +108,119 @@ function hashOtpCode(code) {
 
 function generateOtpCode() {
   return String(crypto.randomInt(100000, 1000000));
+}
+
+function encodeBase64Url(value) {
+  return Buffer.from(value)
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/g, "");
+}
+
+function decodeBase64Url(value) {
+  const normalized = String(value || "")
+    .replace(/-/g, "+")
+    .replace(/_/g, "/");
+  const padding = normalized.length % 4 === 0 ? "" : "=".repeat(4 - (normalized.length % 4));
+  return Buffer.from(`${normalized}${padding}`, "base64").toString("utf8");
+}
+
+function signValue(value) {
+  return encodeBase64Url(
+    crypto.createHmac("sha256", PAYMENT_LINK_SIGNING_SECRET).update(value).digest()
+  );
+}
+
+function buildSignedPaymentLinkCode(paymentLink) {
+  const payload = encodeBase64Url(JSON.stringify({
+    ownerEmail: paymentLink.ownerEmail,
+    ownerName: paymentLink.ownerName,
+    username: paymentLink.username,
+    recipientAddress: paymentLink.recipientAddress,
+    amount: paymentLink.amount,
+    description: paymentLink.description,
+    currency: paymentLink.currency,
+    createdAt: paymentLink.createdAt,
+    nonce: paymentLink.id
+  }));
+
+  return `${payload}.${signValue(payload)}`;
+}
+
+function readPaymentLinkFromCode(linkCode) {
+  const [payload, signature] = String(linkCode || "").split(".");
+
+  if (!payload || !signature || signValue(payload) !== signature) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(decodeBase64Url(payload));
+
+    if (
+      !parsed ||
+      !parsed.ownerEmail ||
+      !parsed.username ||
+      !parsed.recipientAddress ||
+      !parsed.amount ||
+      !parsed.currency
+    ) {
+      return null;
+    }
+
+    return {
+      id: parsed.nonce || linkCode,
+      linkCode,
+      ownerEmail: normalizeEmail(parsed.ownerEmail),
+      ownerName: parsed.ownerName || displayNameFromEmail(parsed.ownerEmail),
+      username: slugifySegment(parsed.username),
+      recipientAddress: parsed.recipientAddress,
+      amount: normalizeAmount(parsed.amount),
+      description: parsed.description || "",
+      currency: normalizeToken(parsed.currency),
+      status: "active",
+      createdAt: parsed.createdAt || new Date().toISOString()
+    };
+  } catch {
+    return null;
+  }
+}
+
+function buildPaymentChallengeToken({ linkId, payerEmail, codeHash, expiresAt }) {
+  const payload = encodeBase64Url(JSON.stringify({
+    linkId,
+    payerEmail,
+    codeHash,
+    expiresAt
+  }));
+
+  return `${payload}.${signValue(payload)}`;
+}
+
+function readPaymentChallengeToken(token) {
+  const [payload, signature] = String(token || "").split(".");
+
+  if (!payload || !signature || signValue(payload) !== signature) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(decodeBase64Url(payload));
+
+    if (!parsed?.linkId || !parsed?.payerEmail || !parsed?.codeHash || !parsed?.expiresAt) {
+      return null;
+    }
+
+    return {
+      linkId: String(parsed.linkId),
+      payerEmail: normalizeEmail(parsed.payerEmail),
+      codeHash: String(parsed.codeHash),
+      expiresAt: String(parsed.expiresAt)
+    };
+  } catch {
+    return null;
+  }
 }
 
 function createEmptyStore() {
@@ -257,6 +371,46 @@ function ensureUserRecord(store, { email, displayName }) {
 
 function getStoredUser(store, email) {
   return store.users[normalizeEmail(email)] || null;
+}
+
+function resolvePaymentLink(store, { linkId, username, amount }) {
+  const normalizedLinkId = String(linkId || "").trim();
+  const normalizedUsername = username ? slugifySegment(username) : "";
+  const normalizedAmount = amount ? String(amount).trim() : "";
+
+  const fromCode = normalizedLinkId ? readPaymentLinkFromCode(normalizedLinkId) : null;
+
+  if (fromCode) {
+    if (
+      (!normalizedUsername || fromCode.username === normalizedUsername) &&
+      (!normalizedAmount || fromCode.amount === normalizedAmount)
+    ) {
+      fromCode.url = buildPaymentLinkUrl(fromCode);
+      return fromCode;
+    }
+  }
+
+  const candidates = [...store.paymentLinks].reverse();
+
+  return candidates.find((link) => {
+    if (normalizedUsername && link.username !== normalizedUsername) {
+      return false;
+    }
+
+    if (normalizedAmount && link.amount !== normalizedAmount) {
+      return false;
+    }
+
+    if (link.status !== "active") {
+      return false;
+    }
+
+    if (!normalizedLinkId) {
+      return true;
+    }
+
+    return link.linkCode === normalizedLinkId || link.id === normalizedLinkId;
+  }) || null;
 }
 
 async function sendVerificationCodeEmail({ to, code, paymentLink }) {
@@ -667,24 +821,13 @@ app.get("/payment-links/resolve", (req, res) => {
     }
 
     const store = readStore();
-    const paymentLink = [...store.paymentLinks]
-      .reverse()
-      .find((link) => {
-        if (link.username !== username || link.amount !== amount || link.status !== "active") {
-          return false;
-        }
-
-        if (linkId) {
-          return link.linkCode === linkId || link.id === linkId;
-        }
-
-        return true;
-      });
+    const paymentLink = resolvePaymentLink(store, { username, amount, linkId });
 
     if (!paymentLink) {
       return res.status(404).json({ error: "Payment link not found" });
     }
 
+    paymentLink.url = buildPaymentLinkUrl(paymentLink);
     res.json(paymentLink);
   } catch (err) {
     console.error("Resolve payment link error:", err);
@@ -716,7 +859,6 @@ app.post("/payment-links", async (req, res) => {
     const normalizedAmount = normalizeAmount(amount);
     const paymentLink = {
       id,
-      linkCode: crypto.randomBytes(4).toString("hex"),
       username: owner.username || DEFAULT_OWNER_USERNAME,
       ownerName: owner.displayName,
       ownerEmail: owner.email,
@@ -728,6 +870,7 @@ app.post("/payment-links", async (req, res) => {
       createdAt: new Date().toISOString()
     };
 
+    paymentLink.linkCode = buildSignedPaymentLinkCode(paymentLink);
     paymentLink.url = buildPaymentLinkUrl(paymentLink);
     store.paymentLinks.push(paymentLink);
     writeStore(store);
@@ -760,9 +903,8 @@ app.post("/payment-links/:linkId/send-code", async (req, res) => {
     const { linkId } = req.params;
     const payerEmail = normalizeEmail(req.body.payerEmail);
     const store = readStore();
-    cleanExpiredPaymentSessions(store);
 
-    const paymentLink = store.paymentLinks.find((link) => link.id === linkId);
+    const paymentLink = resolvePaymentLink(store, { linkId });
 
     if (!paymentLink) {
       return res.status(404).json({ error: "Payment link not found" });
@@ -786,20 +928,14 @@ app.post("/payment-links/:linkId/send-code", async (req, res) => {
       });
     }
 
-    store.paymentAuthSessions = store.paymentAuthSessions.filter((session) => {
-      return !(session.linkId === linkId && session.payerEmail === payerEmail);
-    });
-
     const code = generateOtpCode();
-    const challenge = {
-      id: crypto.randomUUID(),
+    const expiresAt = new Date(Date.now() + OTP_CODE_TTL_MINUTES * 60 * 1000).toISOString();
+    const challengeId = buildPaymentChallengeToken({
       linkId,
       payerEmail,
       codeHash: hashOtpCode(code),
-      attempts: 0,
-      createdAt: new Date().toISOString(),
-      expiresAt: new Date(Date.now() + OTP_CODE_TTL_MINUTES * 60 * 1000).toISOString()
-    };
+      expiresAt
+    });
 
     await sendVerificationCodeEmail({
       to: payerEmail,
@@ -807,11 +943,8 @@ app.post("/payment-links/:linkId/send-code", async (req, res) => {
       paymentLink
     });
 
-    store.paymentAuthSessions.unshift(challenge);
-    writeStore(store);
-
     res.json({
-      challengeId: challenge.id,
+      challengeId,
       payerEmail,
       message: `We sent a verification code to ${payerEmail}.`
     });
@@ -827,8 +960,7 @@ app.post("/payment-links/:linkId/confirm-payment", async (req, res) => {
   const verificationCode = String(req.body.verificationCode || "").trim();
   const challengeId = String(req.body.challengeId || "").trim();
   const store = readStore();
-  cleanExpiredPaymentSessions(store);
-  const paymentLink = store.paymentLinks.find((link) => link.id === linkId);
+  const paymentLink = resolvePaymentLink(store, { linkId });
 
   if (!paymentLink) {
     return res.status(404).json({ error: "Payment link not found" });
@@ -842,43 +974,31 @@ app.post("/payment-links/:linkId/confirm-payment", async (req, res) => {
     return res.status(400).json({ error: "Email, verification code, and challenge ID are required" });
   }
 
-  const sessionIndex = store.paymentAuthSessions.findIndex((session) => {
-    return session.id === challengeId && session.linkId === linkId;
-  });
+  const challenge = readPaymentChallengeToken(challengeId);
 
-  if (sessionIndex === -1) {
+  if (!challenge) {
     return res.status(400).json({ error: "Verification session expired. Please request a new code." });
   }
 
-  const session = store.paymentAuthSessions[sessionIndex];
+  if (challenge.linkId !== linkId) {
+    return res.status(400).json({ error: "Verification session does not match this payment link." });
+  }
 
-  if (session.payerEmail !== payerEmail) {
+  if (challenge.payerEmail !== payerEmail) {
     return res.status(400).json({ error: "Verification email does not match the active session." });
   }
 
-  if (new Date(session.expiresAt).getTime() <= Date.now()) {
-    store.paymentAuthSessions.splice(sessionIndex, 1);
-    writeStore(store);
+  if (new Date(challenge.expiresAt).getTime() <= Date.now()) {
     return res.status(400).json({ error: "Verification code expired. Please request a new code." });
   }
 
-  if (session.attempts >= OTP_MAX_ATTEMPTS) {
-    store.paymentAuthSessions.splice(sessionIndex, 1);
-    writeStore(store);
-    return res.status(400).json({ error: "Too many incorrect attempts. Please request a new code." });
-  }
-
-  if (session.codeHash !== hashOtpCode(verificationCode)) {
-    session.attempts += 1;
-    writeStore(store);
+  if (challenge.codeHash !== hashOtpCode(verificationCode)) {
     return res.status(400).json({ error: "Incorrect verification code." });
   }
 
   const payer = getStoredUser(store, payerEmail);
 
   if (!payer) {
-    store.paymentAuthSessions.splice(sessionIndex, 1);
-    writeStore(store);
     return res.status(404).json({
       error: "We couldn't find a wallet for this email yet.",
       code: "wallet_not_found",
@@ -924,7 +1044,6 @@ app.post("/payment-links/:linkId/confirm-payment", async (req, res) => {
       explorer: transfer.explorer,
       timestamp: payment.paidAt
     });
-    store.paymentAuthSessions.splice(sessionIndex, 1);
     writeStore(store);
 
     res.json(mapStoredPayment(payment));
@@ -944,7 +1063,6 @@ app.post("/payment-links/:linkId/confirm-payment", async (req, res) => {
     };
 
     store.payments.unshift(failedPayment);
-    store.paymentAuthSessions.splice(sessionIndex, 1);
     writeStore(store);
 
     console.error("Payment link confirm error:", err);
