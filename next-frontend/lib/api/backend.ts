@@ -1,5 +1,10 @@
-const BACKEND_API_URL =
-  process.env.BACKEND_API_URL || process.env.NEXT_PUBLIC_BACKEND_API_URL;
+function getBackendApiUrl() {
+  if (typeof window !== "undefined") {
+    return process.env.NEXT_PUBLIC_BACKEND_API_URL || process.env.BACKEND_API_URL;
+  }
+
+  return process.env.BACKEND_API_URL || process.env.NEXT_PUBLIC_BACKEND_API_URL;
+}
 
 export class BackendApiError extends Error {
   status: number;
@@ -14,11 +19,13 @@ export class BackendApiError extends Error {
 }
 
 function buildBackendUrl(path: string) {
-  if (!BACKEND_API_URL) {
-    throw new Error("BACKEND_API_URL is not configured.");
+  const backendApiUrl = getBackendApiUrl();
+
+  if (!backendApiUrl) {
+    throw new Error("VeloxPay backend URL is not configured.");
   }
 
-  return `${BACKEND_API_URL.replace(/\/$/, "")}${path}`;
+  return `${backendApiUrl.replace(/\/$/, "")}${path}`;
 }
 
 export async function backendFetch<T>(path: string, init?: RequestInit): Promise<T> {

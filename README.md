@@ -62,8 +62,9 @@ npm run dev
 
 The Next.js app runs on `http://localhost:3000`.
 
-Important Next.js env value:
+Important Next.js env values:
 - `BACKEND_API_URL=http://localhost:4000`
+- `NEXT_PUBLIC_BACKEND_API_URL=http://localhost:4000`
 
 ## Fresh Vercel deployment
 
@@ -98,6 +99,7 @@ Root directory:
 
 Required environment variable:
 - `BACKEND_API_URL=https://arc-invisible-wallet.vercel.app`
+- `NEXT_PUBLIC_BACKEND_API_URL=https://arc-invisible-wallet.vercel.app`
 - `NEXT_PUBLIC_BUILDER_X_URL=https://x.com/cryptosmart121`
 
 Current deployed URLs:
@@ -106,7 +108,7 @@ Current deployed URLs:
 
 After deployment:
 1. Copy the backend production URL.
-2. Add that URL as `BACKEND_API_URL` in the Next.js frontend project.
+2. Add that URL as both `BACKEND_API_URL` and `NEXT_PUBLIC_BACKEND_API_URL` in the Next.js frontend project.
 3. Set `FRONTEND_ORIGIN` in the backend project to your VeloxPay frontend URL.
 4. Set `PAYMENT_LINK_BASE_URL` and `WALLET_APP_BASE_URL` in the backend project to your VeloxPay frontend URL.
 7. Redeploy the backend and both frontend projects so the updated env vars are applied.

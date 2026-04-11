@@ -17,6 +17,7 @@ It now combines:
 
 ```bash
 BACKEND_API_URL=http://localhost:4000
+NEXT_PUBLIC_BACKEND_API_URL=http://localhost:4000
 NEXT_PUBLIC_BUILDER_X_URL=https://x.com/cryptosmart121
 ```
 
@@ -103,6 +104,7 @@ Set:
 
 ```bash
 BACKEND_API_URL=https://arc-invisible-wallet.vercel.app
+NEXT_PUBLIC_BACKEND_API_URL=https://arc-invisible-wallet.vercel.app
 NEXT_PUBLIC_BUILDER_X_URL=https://x.com/cryptosmart121
 ```
 
