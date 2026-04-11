@@ -11,7 +11,8 @@ const nodemailer = require("nodemailer");
 const ERC20_ABI = [
   "function balanceOf(address owner) view returns (uint256)",
   "function decimals() view returns (uint8)",
-  "function transfer(address to, uint256 value) returns (bool)"
+  "function transfer(address to, uint256 value) returns (bool)",
+  "event Transfer(address indexed from, address indexed to, uint256 value)"
 ];
 
 const TOKENS = {
@@ -40,6 +41,7 @@ const WALLET_APP_BASE_URL = (process.env.WALLET_APP_BASE_URL || "https://arc-wal
 const PAYMENT_LINK_SIGNING_SECRET = process.env.PAYMENT_LINK_SIGNING_SECRET || "veloxpay-demo-secret";
 const OTP_CODE_TTL_MINUTES = Math.max(1, Number(process.env.OTP_CODE_TTL_MINUTES || 10));
 const OTP_MAX_ATTEMPTS = Math.max(1, Number(process.env.OTP_MAX_ATTEMPTS || 5));
+const TRANSFER_HISTORY_LOOKBACK_BLOCKS = Math.max(2000, Number(process.env.TRANSFER_HISTORY_LOOKBACK_BLOCKS || 250000));
 const RESEND_API_URL = "https://api.resend.com/emails";
 
 function normalizeOrigin(origin) {
@@ -90,6 +92,15 @@ function displayNameFromEmail(email) {
     .join(" ");
 }
 
+function usernameFromOwner(email, ownerName) {
+  return (
+    slugifySegment(ownerName)
+    || slugifySegment(normalizeEmail(email).split("@")[0])
+    || slugifySegment(DEFAULT_OWNER_USERNAME)
+    || "member"
+  );
+}
+
 function buildExplorerUrl(hash) {
   return `${ARC_EXPLORER_BASE_URL}/${hash}`;
 }
@@ -138,7 +149,7 @@ function createSignature(value, byteLength) {
 }
 
 function signValue(value) {
-  return createSignature(value, 12);
+  return createSignature(value, 8);
 }
 
 function hasValidSignature(value, signature) {
@@ -161,12 +172,9 @@ function buildSignedPaymentLinkCode(paymentLink) {
   const compactPayload = {
     e: paymentLink.ownerEmail,
     n: paymentLink.ownerName,
-    u: paymentLink.username,
-    r: paymentLink.recipientAddress,
     a: paymentLink.amount,
     d: paymentLink.description,
     c: paymentLink.currency,
-    t: paymentLink.createdAt,
     i: paymentLink.id
   };
   const payload = encodeBase64Url(
@@ -191,30 +199,30 @@ function readPaymentLinkFromCode(linkCode) {
 
   const ownerEmail = parsed.e || parsed.ownerEmail;
   const ownerName = parsed.n || parsed.ownerName;
-  const username = parsed.u || parsed.username;
-  const recipientAddress = parsed.r || parsed.recipientAddress;
   const amount = parsed.a || parsed.amount;
   const description = parsed.d || parsed.description;
   const currency = parsed.c || parsed.currency;
-  const createdAt = parsed.t || parsed.createdAt;
   const nonce = parsed.i || parsed.nonce;
 
-  if (!ownerEmail || !username || !recipientAddress || !amount || !currency) {
+  if (!ownerEmail || !amount || !currency) {
     return null;
   }
+
+  const { signer } = walletFromEmail(ownerEmail);
+  const resolvedOwnerName = ownerName || displayNameFromEmail(ownerEmail);
 
   return {
     id: nonce || linkCode,
     linkCode,
     ownerEmail: normalizeEmail(ownerEmail),
-    ownerName: ownerName || displayNameFromEmail(ownerEmail),
-    username: slugifySegment(username),
-    recipientAddress,
+    ownerName: resolvedOwnerName,
+    username: usernameFromOwner(ownerEmail, resolvedOwnerName),
+    recipientAddress: signer.address,
     amount: normalizeAmount(amount),
     description: description || "",
     currency: normalizeToken(currency),
     status: "active",
-    createdAt: createdAt || new Date().toISOString()
+    createdAt: parsed.createdAt || new Date().toISOString()
   };
 }
 
@@ -312,7 +320,7 @@ function cleanExpiredPaymentSessions(store) {
 
 function buildPaymentLinkPath(paymentLink) {
   if (paymentLink.linkCode) {
-    return `/${paymentLink.username}/${paymentLink.amount}/${paymentLink.linkCode}`;
+    return `/pay/${paymentLink.linkCode}`;
   }
 
   return `/${paymentLink.username}/${paymentLink.amount}`;
@@ -323,7 +331,11 @@ function buildPaymentLinkUrl(paymentLink) {
 }
 
 function buildPaymentLinkLabel(paymentLink) {
-  return buildPaymentLinkPath(paymentLink);
+  if (paymentLink.linkCode) {
+    return `/pay/${paymentLink.linkCode}`;
+  }
+
+  return `/${paymentLink.username}/${paymentLink.amount}`;
 }
 
 function buildWalletCreateUrl(email, paymentLink) {
@@ -442,6 +454,96 @@ function resolvePaymentLink(store, { linkId, username, amount }) {
 
     return link.linkCode === normalizedLinkId || link.id === normalizedLinkId;
   }) || null;
+}
+
+async function fetchBlockTimestamp(blockNumber, cache) {
+  if (!blockNumber) {
+    return new Date().toISOString();
+  }
+
+  if (!cache.has(blockNumber)) {
+    cache.set(
+      blockNumber,
+      provider.getBlock(blockNumber).then((block) => (
+        block?.timestamp ? new Date(Number(block.timestamp) * 1000).toISOString() : new Date().toISOString()
+      ))
+    );
+  }
+
+  return cache.get(blockNumber);
+}
+
+async function fetchTokenTransferHistory(address, { direction = "all" } = {}) {
+  if (!ethers.isAddress(address)) {
+    return [];
+  }
+
+  const latestBlock = await provider.getBlockNumber();
+  const fromBlock = Math.max(0, latestBlock - TRANSFER_HISTORY_LOOKBACK_BLOCKS);
+  const addressLower = address.toLowerCase();
+  const timestampCache = new Map();
+
+  const transfers = await Promise.all(
+    Object.values(TOKENS).map(async (tokenConfig) => {
+      const contract = getTokenContract(tokenConfig.symbol);
+      const outgoingFilter = contract.filters.Transfer(address, null);
+      const incomingFilter = contract.filters.Transfer(null, address);
+
+      const [outgoingLogs, incomingLogs, decimals] = await Promise.all([
+        direction === "incoming" ? Promise.resolve([]) : contract.queryFilter(outgoingFilter, fromBlock, latestBlock),
+        direction === "outgoing" ? Promise.resolve([]) : contract.queryFilter(incomingFilter, fromBlock, latestBlock),
+        contract.decimals()
+      ]);
+
+      const seen = new Set();
+      const mergedLogs = [...incomingLogs, ...outgoingLogs].filter((log) => {
+        const key = `${log.transactionHash}-${log.index}-${tokenConfig.symbol}`;
+        if (seen.has(key)) {
+          return false;
+        }
+        seen.add(key);
+        return true;
+      });
+
+      return Promise.all(
+        mergedLogs.map(async (log) => {
+          const parsed = contract.interface.parseLog(log);
+          const from = String(parsed?.args?.from || "");
+          const to = String(parsed?.args?.to || "");
+          const value = parsed?.args?.value;
+
+          if (
+            direction === "incoming" && to.toLowerCase() !== addressLower
+            || direction === "outgoing" && from.toLowerCase() !== addressLower
+          ) {
+            return null;
+          }
+
+          return {
+            id: `${tokenConfig.symbol}-${log.transactionHash}-${log.index}`,
+            hash: log.transactionHash,
+            transactionHash: log.transactionHash,
+            from,
+            to,
+            amount: ethers.formatUnits(value, decimals),
+            symbol: tokenConfig.symbol,
+            token: tokenConfig.symbol,
+            currency: tokenConfig.symbol,
+            status: "confirmed",
+            explorer: buildExplorerUrl(log.transactionHash),
+            explorerUrl: buildExplorerUrl(log.transactionHash),
+            timestamp: await fetchBlockTimestamp(log.blockNumber, timestampCache),
+            paidAt: await fetchBlockTimestamp(log.blockNumber, timestampCache)
+          };
+        })
+      );
+    })
+  );
+
+  return transfers
+    .flat()
+    .filter(Boolean)
+    .sort((a, b) => new Date(b.timestamp || b.paidAt).getTime() - new Date(a.timestamp || a.paidAt).getTime());
 }
 
 async function sendVerificationCodeEmail({ to, code, paymentLink }) {
@@ -706,6 +808,27 @@ function mapStoredPayment(payment) {
   };
 }
 
+function mergeUniqueByKey(primaryItems, secondaryItems, buildKey) {
+  const seen = new Set();
+  const merged = [];
+
+  for (const item of [...primaryItems, ...secondaryItems]) {
+    if (!item) {
+      continue;
+    }
+
+    const key = buildKey(item);
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    merged.push(item);
+  }
+
+  return merged;
+}
+
 app.get("/", (req, res) => {
   res.json({ status: "ok", message: "Arc Wallet Backend is running" });
 });
@@ -808,7 +931,13 @@ app.get("/txs", async (req, res) => {
     if (!address) return res.status(400).json({ error: "Address required" });
 
     const store = readStore();
-    const txs = store.txs.filter((tx) => tx.from === address || tx.to === address);
+    const storedTxs = store.txs.filter((tx) => tx.from === address || tx.to === address);
+    const onchainTxs = await fetchTokenTransferHistory(address, { direction: "all" });
+    const txs = mergeUniqueByKey(
+      storedTxs,
+      onchainTxs,
+      (tx) => `${tx.hash || tx.transactionHash}-${tx.symbol || tx.token || "ARC"}`
+    ).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
     res.json({ txs, address });
   } catch (err) {
@@ -848,7 +977,11 @@ app.get("/payment-links", (req, res) => {
     const store = readStore();
     const paymentLinks = [...store.paymentLinks]
       .filter((link) => !ownerEmail || link.ownerEmail === ownerEmail)
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .map((link) => ({
+        ...link,
+        url: buildPaymentLinkUrl(link)
+      }));
 
     res.json(paymentLinks);
   } catch (err) {
@@ -863,8 +996,8 @@ app.get("/payment-links/resolve", (req, res) => {
     const amount = String(req.query.amount || "").trim();
     const linkId = String(req.query.linkId || "").trim();
 
-    if (!username || !amount) {
-      return res.status(400).json({ error: "Username and amount are required" });
+    if (!linkId && (!username || !amount)) {
+      return res.status(400).json({ error: "Link ID or username and amount are required" });
     }
 
     const store = readStore();
@@ -929,14 +1062,38 @@ app.post("/payment-links", async (req, res) => {
   }
 });
 
-app.get("/payments", (req, res) => {
+app.get("/payments", async (req, res) => {
   try {
     const ownerEmail = normalizeEmail(req.query.ownerEmail);
     const store = readStore();
-    const payments = [...store.payments]
+    const storedPayments = [...store.payments]
       .filter((payment) => !ownerEmail || payment.ownerEmail === ownerEmail)
       .sort((a, b) => new Date(b.paidAt || b.createdAt).getTime() - new Date(a.paidAt || a.createdAt).getTime())
       .map(mapStoredPayment);
+
+    if (!ownerEmail) {
+      return res.json(storedPayments);
+    }
+
+    const { signer } = walletFromEmail(ownerEmail);
+    const onchainIncoming = (await fetchTokenTransferHistory(signer.address, { direction: "incoming" }))
+      .map((tx) => ({
+        id: tx.id,
+        linkId: tx.hash,
+        linkLabel: "Incoming transfer",
+        amount: tx.amount,
+        currency: tx.currency,
+        status: "completed",
+        transactionHash: tx.hash,
+        explorerUrl: tx.explorerUrl,
+        paidAt: tx.paidAt
+      }));
+
+    const payments = mergeUniqueByKey(
+      storedPayments,
+      onchainIncoming,
+      (payment) => payment.transactionHash || payment.id
+    ).sort((a, b) => new Date(b.paidAt || 0).getTime() - new Date(a.paidAt || 0).getTime());
 
     res.json(payments);
   } catch (err) {

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { CreateLinkForm } from "@/components/dashboard/create-link-form";
 import { PaymentLinksTable } from "@/components/dashboard/payment-links-table";
 import { PaymentsTable } from "@/components/dashboard/payments-table";
@@ -12,14 +13,16 @@ import type { Payment } from "@/lib/types/payment";
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
+  const cookieStore = await cookies();
+  const ownerEmail = cookieStore.get("veloxpay_owner_email")?.value || "";
   let paymentLinks: PaymentLink[] = [];
   let payments: Payment[] = [];
   let loadError = "";
 
   try {
     [paymentLinks, payments] = await Promise.all([
-      listPaymentLinks(),
-      listPayments(),
+      listPaymentLinks(ownerEmail),
+      listPayments(ownerEmail),
     ]);
   } catch (error) {
     loadError =
@@ -39,8 +42,7 @@ export default async function DashboardPage() {
             Manage payment links and incoming payments
           </h1>
           <p className="mt-3 max-w-2xl text-sm text-slate-600">
-            Create public payment URLs, track who paid, and keep the flow friendly for
-            non-crypto users.
+            Create public payment URLs, track who paid, and keep the flow simple.
           </p>
         </div>
         <Button asChild>
@@ -53,6 +55,13 @@ export default async function DashboardPage() {
           <h2 className="text-lg font-semibold text-amber-900">Dashboard is waiting on the backend</h2>
           <p className="mt-2 text-sm text-amber-800">
             {loadError}
+          </p>
+        </Card>
+      ) : !ownerEmail ? (
+        <Card className="border border-slate-200 bg-slate-50">
+          <h2 className="text-lg font-semibold text-slate-900">Add your wallet email to load your dashboard</h2>
+          <p className="mt-2 text-sm text-slate-600">
+            Use the same wallet email in the create-link form below and we&apos;ll keep this dashboard tied to your account.
           </p>
         </Card>
       ) : null}

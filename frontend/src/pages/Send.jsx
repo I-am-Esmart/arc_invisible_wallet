@@ -2,6 +2,7 @@ import { useState } from "react"
 import { sendTransaction } from "../lib/api"
 import { useNavigate } from "react-router-dom"
 import { DEFAULT_TOKEN, TOKEN_OPTIONS } from "../lib/tokens"
+import { addStoredTxForUser } from "../lib/txStorage"
 
 const ARC_EXPLORER_BASE = "https://testnet.arcscan.app/tx"
 const getExplorerUrl = (hash) => (
@@ -50,8 +51,7 @@ export default function Send() {
         timestamp: Date.now(),
         explorer: getExplorerUrl(res.hash),
       }
-      const existing = JSON.parse(localStorage.getItem("txs") || "[]")
-      localStorage.setItem("txs", JSON.stringify([txRecord, ...existing]))
+      addStoredTxForUser(user, txRecord)
 
       setTo("")
       setAmount("")

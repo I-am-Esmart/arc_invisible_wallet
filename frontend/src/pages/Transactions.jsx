@@ -1,11 +1,29 @@
 import { useEffect, useState } from "react"
 import { fetchTxHistory } from "../lib/api"
 import { useNavigate } from "react-router-dom"
+import { getStoredTxsForUser } from "../lib/txStorage"
 
 const ARC_EXPLORER_BASE = "https://testnet.arcscan.app/tx"
 
-function getStoredTxs() {
-  return JSON.parse(localStorage.getItem("txs") || "[]")
+function mergeTxLists(primaryTxs, secondaryTxs) {
+  const seen = new Set()
+  const merged = []
+
+  for (const tx of [...primaryTxs, ...secondaryTxs]) {
+    if (!tx) {
+      continue
+    }
+
+    const key = tx.hash || `${tx.from}-${tx.to}-${tx.timestamp}`
+    if (seen.has(key)) {
+      continue
+    }
+
+    seen.add(key)
+    merged.push(tx)
+  }
+
+  return merged.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
 }
 
 function getExplorerUrl(tx) {
@@ -30,14 +48,16 @@ export default function Transactions() {
       setError("")
 
       // Show locally stored txs immediately (useful when backend cannot persist state)
-      const localTxs = getStoredTxs()
+      const user = JSON.parse(localStorage.getItem("user"))
+      const localTxs = getStoredTxsForUser(user)
       if (localTxs.length) {
         setTxs(localTxs)
       }
 
-      const user = JSON.parse(localStorage.getItem("user"))
       const data = await fetchTxHistory(user?.address)
-      const nextTxs = Array.isArray(data.txs) && data.txs.length > 0 ? data.txs : localTxs
+      const nextTxs = Array.isArray(data.txs)
+        ? mergeTxLists(data.txs, localTxs)
+        : localTxs
       setTxs(nextTxs)
     } catch (err) {
       setError(err.message)

@@ -7,8 +7,14 @@ type PaymentChallenge = {
   message: string;
 };
 
-export async function listPayments() {
-  return backendFetch<Payment[]>("/payments");
+export async function listPayments(ownerEmail?: string) {
+  const params = new URLSearchParams();
+
+  if (ownerEmail) {
+    params.set("ownerEmail", ownerEmail);
+  }
+
+  return backendFetch<Payment[]>(`/payments${params.toString() ? `?${params.toString()}` : ""}`);
 }
 
 export async function startPaymentForLink(linkId: string, payerEmail: string) {

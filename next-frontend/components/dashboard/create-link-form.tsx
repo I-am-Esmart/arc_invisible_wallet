@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { createPaymentLinkAction, type CreateLinkActionState } from "@/app/create/actions";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -14,20 +15,40 @@ const OWNER_EMAIL_KEY = "veloxpay_owner_email";
 const OWNER_NAME_KEY = "veloxpay_owner_name";
 
 export function CreateLinkForm({ compact = false }: { compact?: boolean }) {
+  const router = useRouter();
   const [state, formAction, isPending] = useActionState(createPaymentLinkAction, initialState);
   const [ownerEmail, setOwnerEmail] = useState("");
   const [ownerName, setOwnerName] = useState("");
   const [copied, setCopied] = useState(false);
 
+  function syncOwnerCookies(email: string, name: string) {
+    if (!email) {
+      return;
+    }
+
+    document.cookie = `veloxpay_owner_email=${encodeURIComponent(email)}; path=/; max-age=31536000; samesite=lax`;
+    document.cookie = `veloxpay_owner_name=${encodeURIComponent(name || "")}; path=/; max-age=31536000; samesite=lax`;
+  }
+
   useEffect(() => {
-    setOwnerEmail(localStorage.getItem(OWNER_EMAIL_KEY) || "");
-    setOwnerName(localStorage.getItem(OWNER_NAME_KEY) || "");
+    const savedEmail = localStorage.getItem(OWNER_EMAIL_KEY) || "";
+    const savedName = localStorage.getItem(OWNER_NAME_KEY) || "";
+    setOwnerEmail(savedEmail);
+    setOwnerName(savedName);
+
+    if (savedEmail) {
+      syncOwnerCookies(savedEmail, savedName);
+      if (compact) {
+        router.refresh();
+      }
+    }
   }, []);
 
   useEffect(() => {
     if (state.status === "success") {
       if (ownerEmail) {
         localStorage.setItem(OWNER_EMAIL_KEY, ownerEmail);
+        syncOwnerCookies(ownerEmail, ownerName);
       }
 
       if (ownerName) {
@@ -35,8 +56,9 @@ export function CreateLinkForm({ compact = false }: { compact?: boolean }) {
       }
 
       setCopied(false);
+      router.refresh();
     }
-  }, [ownerEmail, ownerName, state.status]);
+  }, [compact, ownerEmail, ownerName, router, state.status]);
 
   async function handleCopyLink() {
     if (!state.url) {

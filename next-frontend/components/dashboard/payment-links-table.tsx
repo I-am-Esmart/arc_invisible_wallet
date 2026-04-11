@@ -4,6 +4,22 @@ import { Badge } from "@/components/ui/badge";
 import type { PaymentLink } from "@/lib/types/payment-link";
 import { formatDate, formatMoney } from "@/lib/utils/format";
 
+function getLinkPath(link: PaymentLink) {
+  if (link.url) {
+    try {
+      return new URL(link.url).pathname;
+    } catch {
+      return link.url;
+    }
+  }
+
+  if (link.linkCode) {
+    return `/pay/${link.linkCode}`;
+  }
+
+  return `/${link.username}/${link.amount}`;
+}
+
 export function PaymentLinksTable({
   paymentLinks,
 }: {
@@ -41,10 +57,10 @@ export function PaymentLinksTable({
                 <tr key={link.id}>
                   <td className="py-4 pr-6">
                     <Link
-                      href={link.linkCode ? `/${link.username}/${link.amount}/${link.linkCode}` : `/${link.username}/${link.amount}`}
+                      href={getLinkPath(link)}
                       className="font-medium text-slate-900"
                     >
-                      {link.linkCode ? `/${link.username}/${link.amount}/${link.linkCode}` : `/${link.username}/${link.amount}`}
+                      {getLinkPath(link)}
                     </Link>
                   </td>
                   <td className="py-4 pr-6 text-slate-700">

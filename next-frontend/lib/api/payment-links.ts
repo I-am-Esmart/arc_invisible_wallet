@@ -8,12 +8,17 @@ type PaymentLinkPayload = {
   ownerName?: string;
 };
 
-export async function getPaymentLinkByRoute(username: string, amount: string, linkId?: string) {
+export async function getPaymentLinkByRoute(username?: string, amount?: string, linkId?: string) {
   try {
-    const params = new URLSearchParams({
-      username,
-      amount,
-    });
+    const params = new URLSearchParams();
+
+    if (username) {
+      params.set("username", username);
+    }
+
+    if (amount) {
+      params.set("amount", amount);
+    }
 
     if (linkId) {
       params.set("linkId", linkId);
@@ -31,8 +36,14 @@ export async function getPaymentLinkByRoute(username: string, amount: string, li
   }
 }
 
-export async function listPaymentLinks() {
-  return backendFetch<PaymentLink[]>("/payment-links");
+export async function listPaymentLinks(ownerEmail?: string) {
+  const params = new URLSearchParams();
+
+  if (ownerEmail) {
+    params.set("ownerEmail", ownerEmail);
+  }
+
+  return backendFetch<PaymentLink[]>(`/payment-links${params.toString() ? `?${params.toString()}` : ""}`);
 }
 
 export async function createPaymentLink(payload: PaymentLinkPayload) {
