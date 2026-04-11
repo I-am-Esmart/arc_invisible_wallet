@@ -41,8 +41,11 @@ const WALLET_APP_BASE_URL = (process.env.WALLET_APP_BASE_URL || DEFAULT_LINK_BAS
 const PAYMENT_LINK_SIGNING_SECRET = process.env.PAYMENT_LINK_SIGNING_SECRET || "veloxpay-demo-secret";
 const OTP_CODE_TTL_MINUTES = Math.max(1, Number(process.env.OTP_CODE_TTL_MINUTES || 10));
 const OTP_MAX_ATTEMPTS = Math.max(1, Number(process.env.OTP_MAX_ATTEMPTS || 5));
-const TRANSFER_HISTORY_LOOKBACK_BLOCKS = Math.max(2000, Number(process.env.TRANSFER_HISTORY_LOOKBACK_BLOCKS || 250000));
+const TRANSFER_HISTORY_LOOKBACK_BLOCKS = Math.max(2000, Number(process.env.TRANSFER_HISTORY_LOOKBACK_BLOCKS || 50000));
 const LOG_QUERY_CHUNK_SIZE = Math.max(250, Number(process.env.LOG_QUERY_CHUNK_SIZE || 5000));
+const MAX_HISTORY_ITEMS = Math.max(10, Number(process.env.MAX_HISTORY_ITEMS || 20));
+const TX_RECEIPT_POLL_INTERVAL_MS = Math.max(2000, Number(process.env.TX_RECEIPT_POLL_INTERVAL_MS || 4000));
+const TX_RECEIPT_TIMEOUT_MS = Math.max(15000, Number(process.env.TX_RECEIPT_TIMEOUT_MS || 120000));
 const RESEND_API_URL = "https://api.resend.com/emails";
 
 function normalizeOrigin(origin) {
@@ -484,6 +487,16 @@ function isLogRangeError(error) {
   );
 }
 
+function isRateLimitError(error) {
+  const message = String(error?.message || "");
+  return (
+    message.includes("100/second request limit reached")
+    || message.includes("rate limit")
+    || message.includes("429")
+    || message.includes("-32007")
+  );
+}
+
 async function queryFilterInChunks(contract, filter, fromBlock, toBlock, chunkSize = LOG_QUERY_CHUNK_SIZE) {
   if (fromBlock > toBlock) {
     return [];
@@ -539,14 +552,23 @@ async function fetchTokenTransferHistory(address, { direction = "all" } = {}) {
       ]);
 
       const seen = new Set();
-      const mergedLogs = [...incomingLogs, ...outgoingLogs].filter((log) => {
-        const key = `${log.transactionHash}-${log.index}-${tokenConfig.symbol}`;
-        if (seen.has(key)) {
-          return false;
-        }
-        seen.add(key);
-        return true;
-      });
+      const mergedLogs = [...incomingLogs, ...outgoingLogs]
+        .sort((a, b) => {
+          if (a.blockNumber !== b.blockNumber) {
+            return b.blockNumber - a.blockNumber;
+          }
+
+          return (b.index || 0) - (a.index || 0);
+        })
+        .filter((log) => {
+          const key = `${log.transactionHash}-${log.index}-${tokenConfig.symbol}`;
+          if (seen.has(key)) {
+            return false;
+          }
+          seen.add(key);
+          return true;
+        })
+        .slice(0, MAX_HISTORY_ITEMS);
 
       return Promise.all(
         mergedLogs.map(async (log) => {
@@ -587,6 +609,29 @@ async function fetchTokenTransferHistory(address, { direction = "all" } = {}) {
     .flat()
     .filter(Boolean)
     .sort((a, b) => new Date(b.timestamp || b.paidAt).getTime() - new Date(a.timestamp || a.paidAt).getTime());
+}
+
+async function waitForTransactionReceiptWithBackoff(hash) {
+  const startedAt = Date.now();
+  let delay = TX_RECEIPT_POLL_INTERVAL_MS;
+
+  while (Date.now() - startedAt < TX_RECEIPT_TIMEOUT_MS) {
+    try {
+      const receipt = await provider.getTransactionReceipt(hash);
+      if (receipt) {
+        return receipt;
+      }
+    } catch (error) {
+      if (!isRateLimitError(error)) {
+        throw error;
+      }
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, delay));
+    delay = Math.min(delay + 1000, 10000);
+  }
+
+  throw new Error("Transaction was sent but confirmation is taking too long. Please check Arc Explorer in a moment.");
 }
 
 async function sendVerificationCodeEmail({ to, code, paymentLink }) {
@@ -699,6 +744,7 @@ app.use(cors({
 }));
 
 const provider = new ethers.JsonRpcProvider(process.env.ARC_RPC || "https://rpc.testnet.arc.network");
+provider.pollingInterval = TX_RECEIPT_POLL_INTERVAL_MS;
 
 function walletFromEmail(email) {
   const normalizedEmail = normalizeEmail(email) || "default";
@@ -820,7 +866,7 @@ async function executeTokenTransfer({ to, amount, email, token }) {
   console.log(`Sending ${amount} ${tokenConfig.symbol} from ${signerAddress} to ${to}`);
 
   const tx = await tokenContract.transfer(to, value, overrides);
-  const receipt = await tx.wait();
+  const receipt = await waitForTransactionReceiptWithBackoff(tx.hash);
   const transactionHash = receipt?.hash || receipt?.transactionHash || tx.hash;
 
   console.log(`Transaction sent: ${transactionHash}`);
@@ -975,7 +1021,14 @@ app.get("/txs", async (req, res) => {
 
     const store = readStore();
     const storedTxs = store.txs.filter((tx) => tx.from === address || tx.to === address);
-    const onchainTxs = await fetchTokenTransferHistory(address, { direction: "all" });
+    let onchainTxs = [];
+
+    try {
+      onchainTxs = await fetchTokenTransferHistory(address, { direction: "all" });
+    } catch (historyError) {
+      console.warn("Token history fallback to stored txs:", historyError.message);
+    }
+
     const txs = mergeUniqueByKey(
       storedTxs,
       onchainTxs,
@@ -1119,18 +1172,24 @@ app.get("/payments", async (req, res) => {
     }
 
     const { signer } = walletFromEmail(ownerEmail);
-    const onchainIncoming = (await fetchTokenTransferHistory(signer.address, { direction: "incoming" }))
-      .map((tx) => ({
-        id: tx.id,
-        linkId: tx.hash,
-        linkLabel: "Incoming transfer",
-        amount: tx.amount,
-        currency: tx.currency,
-        status: "completed",
-        transactionHash: tx.hash,
-        explorerUrl: tx.explorerUrl,
-        paidAt: tx.paidAt
-      }));
+    let onchainIncoming = [];
+
+    try {
+      onchainIncoming = (await fetchTokenTransferHistory(signer.address, { direction: "incoming" }))
+        .map((tx) => ({
+          id: tx.id,
+          linkId: tx.hash,
+          linkLabel: "Incoming transfer",
+          amount: tx.amount,
+          currency: tx.currency,
+          status: "completed",
+          transactionHash: tx.hash,
+          explorerUrl: tx.explorerUrl,
+          paidAt: tx.paidAt
+        }));
+    } catch (paymentHistoryError) {
+      console.warn("Payments fallback to stored records:", paymentHistoryError.message);
+    }
 
     const payments = mergeUniqueByKey(
       storedPayments,

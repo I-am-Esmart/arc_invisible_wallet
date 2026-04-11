@@ -24,6 +24,18 @@ export function AppHeader() {
     router.refresh();
   }
 
+  const navItems = walletUser
+    ? [
+        { href: "/dashboard", label: "Overview" },
+        { href: "/wallet", label: "Wallet" },
+        { href: "/links", label: "Links" },
+        { href: "/payments", label: "Payments" },
+      ]
+    : [
+        { href: "/", label: "Home" },
+        { href: "/login", label: "Create wallet" },
+      ];
+
   return (
     <header className="mb-8 flex flex-col gap-4 rounded-[2rem] bg-white/85 px-5 py-4 shadow-sm ring-1 ring-slate-200 backdrop-blur dark:bg-slate-900/80 dark:ring-slate-700 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex items-center gap-3">
@@ -36,12 +48,15 @@ export function AppHeader() {
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <Button asChild variant="ghost">
-          <Link href="/">Home</Link>
-        </Button>
-        <Button asChild variant="ghost">
-          <Link href="/dashboard">Dashboard</Link>
-        </Button>
+        {navItems.map((item) => {
+          const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
+
+          return (
+            <Button key={item.href} asChild variant={isActive ? "secondary" : "ghost"}>
+              <Link href={item.href}>{item.label}</Link>
+            </Button>
+          );
+        })}
         {!walletUser ? (
           <Button asChild>
             <Link href="/login">Create wallet</Link>
