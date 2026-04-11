@@ -1,6 +1,14 @@
 # VeloxPay Frontend
 
-This is the separate Next.js App Router frontend for the VeloxPay payment-link product.
+This is the main Next.js App Router frontend for VeloxPay.
+
+It now combines:
+- wallet create/restore with email
+- wallet balances
+- send and receive
+- wallet activity history
+- payment link creation
+- incoming payment tracking
 
 ## Run locally
 
@@ -43,7 +51,8 @@ PAYMENT_LINK_OWNER_USERNAME=emmanuel
 PAYMENT_LINK_BASE_URL=http://localhost:3000
 PAYMENT_LINK_DEFAULT_CURRENCY=USDC
 PAYMENT_LINK_SIGNING_SECRET=change-this-to-a-random-secret
-WALLET_APP_BASE_URL=https://arc-wallet.vercel.app
+WALLET_APP_BASE_URL=https://veloxpay.vercel.app
+LOG_QUERY_CHUNK_SIZE=5000
 SMTP_HOST=smtp.gmail.com
 SMTP_PORT=465
 SMTP_SECURE=true
@@ -66,13 +75,14 @@ Set these environment variables:
 
 ```bash
 ARC_RPC=https://rpc.testnet.arc.network
-FRONTEND_ORIGIN=https://arc-wallet.vercel.app,https://veloxpay.vercel.app
+FRONTEND_ORIGIN=https://veloxpay.vercel.app
 PAYMENT_LINK_OWNER_EMAIL=your-owner-email@example.com
 PAYMENT_LINK_OWNER_USERNAME=emmanuel
 PAYMENT_LINK_BASE_URL=https://veloxpay.vercel.app
 PAYMENT_LINK_DEFAULT_CURRENCY=USDC
 PAYMENT_LINK_SIGNING_SECRET=change-this-to-a-random-secret
-WALLET_APP_BASE_URL=https://arc-wallet.vercel.app
+WALLET_APP_BASE_URL=https://veloxpay.vercel.app
+LOG_QUERY_CHUNK_SIZE=5000
 SMTP_HOST=smtp.gmail.com
 SMTP_PORT=465
 SMTP_SECURE=true
@@ -98,11 +108,10 @@ NEXT_PUBLIC_BUILDER_X_URL=https://x.com/cryptosmart121
 
 Current deployed URLs:
 - VeloxPay: `https://veloxpay.vercel.app/`
-- Wallet app: `https://arc-wallet.vercel.app/`
 - Backend: `https://arc-invisible-wallet.vercel.app/`
 
 ## Notes
 
-- This frontend does not implement wallet or blockchain logic.
+- This frontend uses the existing backend wallet and blockchain logic.
 - File-based storage on Vercel uses `/tmp`, which is fine for demos but not durable enough for production data.
 - Payments now use one-time email verification, and for your current setup you can use Gmail SMTP with an app password instead of buying a domain first.

@@ -6,6 +6,7 @@ import { createPaymentLinkAction, type CreateLinkActionState } from "@/app/creat
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Field } from "@/components/ui/field";
+import type { WalletUser } from "@/lib/types/wallet";
 
 const initialState: CreateLinkActionState = {
   status: "idle",
@@ -14,7 +15,15 @@ const initialState: CreateLinkActionState = {
 const OWNER_EMAIL_KEY = "veloxpay_owner_email";
 const OWNER_NAME_KEY = "veloxpay_owner_name";
 
-export function CreateLinkForm({ compact = false }: { compact?: boolean }) {
+export function CreateLinkForm({
+  compact = false,
+  walletUser,
+  onCreated,
+}: {
+  compact?: boolean;
+  walletUser?: WalletUser | null;
+  onCreated?: (url?: string) => void;
+}) {
   const router = useRouter();
   const [state, formAction, isPending] = useActionState(createPaymentLinkAction, initialState);
   const [ownerEmail, setOwnerEmail] = useState("");
@@ -31,6 +40,19 @@ export function CreateLinkForm({ compact = false }: { compact?: boolean }) {
   }
 
   useEffect(() => {
+    if (walletUser?.email) {
+      const nextName = walletUser.displayName || "";
+      setOwnerEmail(walletUser.email);
+      setOwnerName(nextName);
+      localStorage.setItem(OWNER_EMAIL_KEY, walletUser.email);
+      localStorage.setItem(OWNER_NAME_KEY, nextName);
+      syncOwnerCookies(walletUser.email, nextName);
+      if (compact) {
+        router.refresh();
+      }
+      return;
+    }
+
     const savedEmail = localStorage.getItem(OWNER_EMAIL_KEY) || "";
     const savedName = localStorage.getItem(OWNER_NAME_KEY) || "";
     setOwnerEmail(savedEmail);
@@ -42,7 +64,7 @@ export function CreateLinkForm({ compact = false }: { compact?: boolean }) {
         router.refresh();
       }
     }
-  }, []);
+  }, [compact, router, walletUser]);
 
   useEffect(() => {
     if (state.status === "success") {
@@ -57,8 +79,9 @@ export function CreateLinkForm({ compact = false }: { compact?: boolean }) {
 
       setCopied(false);
       router.refresh();
+      onCreated?.(state.url);
     }
-  }, [compact, ownerEmail, ownerName, router, state.status]);
+  }, [compact, onCreated, ownerEmail, ownerName, router, state.status, state.url]);
 
   async function handleCopyLink() {
     if (!state.url) {
@@ -78,38 +101,54 @@ export function CreateLinkForm({ compact = false }: { compact?: boolean }) {
     <Card className={compact ? "" : "max-w-2xl"}>
       <h2 className="text-xl font-semibold text-slate-900">Create a payment link</h2>
       <p className="mt-2 text-sm text-slate-600">
-        Add your wallet email once and we&apos;ll remember it here for the next link you make.
+        {walletUser?.email
+          ? "Your wallet is already connected, so you can generate a payment link in seconds."
+          : "Add your wallet email once and we&apos;ll remember it here for the next link you make."}
       </p>
 
       <form action={formAction} className="mt-6 space-y-5">
-        <Field
-          label="Wallet email"
-          hint="Use the same email you used to create or restore your wallet."
-        >
-          <input
-            name="ownerEmail"
-            type="email"
-            placeholder="you@example.com"
-            value={ownerEmail}
-            onChange={(event) => setOwnerEmail(event.target.value)}
-            required
-            className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
-          />
-        </Field>
+        <input name="ownerEmail" type="hidden" value={ownerEmail} />
+        <input name="ownerName" type="hidden" value={ownerName} />
 
-        <Field
-          label="Name"
-          hint="We&apos;ll show this on your payment page so people know who they&apos;re paying."
-        >
-          <input
-            name="ownerName"
-            type="text"
-            placeholder="Smart"
-            value={ownerName}
-            onChange={(event) => setOwnerName(event.target.value)}
-            className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
-          />
-        </Field>
+        {walletUser?.email ? (
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="text-sm font-medium text-slate-900">
+              Creating as {ownerName || walletUser.email}
+            </div>
+            <div className="mt-1 text-sm text-slate-500">{ownerEmail}</div>
+          </div>
+        ) : (
+          <>
+            <Field
+              label="Wallet email"
+              hint="Use the same email you used to create or restore your wallet."
+            >
+              <input
+                name="ownerEmailVisible"
+                type="email"
+                placeholder="you@example.com"
+                value={ownerEmail}
+                onChange={(event) => setOwnerEmail(event.target.value)}
+                required
+                className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+              />
+            </Field>
+
+            <Field
+              label="Name"
+              hint="We&apos;ll show this on your payment page so people know who they&apos;re paying."
+            >
+              <input
+                name="ownerNameVisible"
+                type="text"
+                placeholder="Smart"
+                value={ownerName}
+                onChange={(event) => setOwnerName(event.target.value)}
+                className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+              />
+            </Field>
+          </>
+        )}
 
         <Field
           label="Amount"

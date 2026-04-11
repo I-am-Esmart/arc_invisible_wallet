@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
-import { ThemeToggle } from "@/components/theme/theme-toggle";
+import { AppHeader } from "@/components/app-header";
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: "VeloxPay",
-  description: "Create payment links, share them in seconds, and get paid with a simple checkout experience.",
+  description: "Create a wallet, send and receive USDC or EURC, and manage payment links from one simple VeloxPay workspace.",
 };
 
 export default function RootLayout({
@@ -18,9 +18,7 @@ export default function RootLayout({
       <body>
         <div className="min-h-screen">
           <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
-            <div className="mb-6 flex justify-end">
-              <ThemeToggle />
-            </div>
+            <AppHeader />
             {children}
           </div>
         </div>

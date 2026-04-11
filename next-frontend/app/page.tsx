@@ -27,58 +27,56 @@ export default function HomePage() {
               VeloxPay
             </p>
             <h1 className="mt-5 max-w-3xl text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl">
-              Share a payment link. Get paid without the usual friction.
+              One wallet for sending, receiving, and getting paid by link.
             </h1>
             <p className="mt-5 max-w-2xl text-lg leading-8 text-slate-600">
-              Create a simple link, send it to anyone, and let them pay in a clean,
-              familiar flow. No confusing setup screen. No clutter. Just a fast way to
-              collect money.
+              VeloxPay brings your wallet and payment links into one place. Create or
+              restore your wallet once, send USDC or EURC, receive funds, share payment
+              links, and track everything from the same workspace.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <Button asChild>
-                <Link href="/create">Create payment link</Link>
+                <Link href="/login">Create or restore wallet</Link>
               </Button>
               <Button asChild variant="secondary">
-                <Link href="/dashboard">Open dashboard</Link>
+                <Link href="/dashboard">Open workspace</Link>
               </Button>
             </div>
 
             <div className="mt-10 flex flex-wrap items-center gap-6 text-sm text-slate-600">
               <div>
-                <div className="font-semibold text-slate-900">Fast checkout</div>
-                <div>Make it easy for people to pay you.</div>
+                <div className="font-semibold text-slate-900">Wallet built in</div>
+                <div>Create once and use it across every payment flow.</div>
               </div>
               <div>
                 <div className="font-semibold text-slate-900">Shareable links</div>
-                <div>Perfect for DMs, bios, invoices, and posts.</div>
+                <div>Collect payments in DMs, bios, invoices, and posts.</div>
               </div>
               <div>
-                <div className="font-semibold text-slate-900">Clear tracking</div>
-                <div>See links created and payments received in one place.</div>
+                <div className="font-semibold text-slate-900">One clear dashboard</div>
+                <div>See balances, activity, links, and payments together.</div>
               </div>
             </div>
           </div>
 
           <Card className="border border-white/70 bg-white/85 p-7 backdrop-blur">
             <div className="rounded-2xl bg-slate-950 p-5 text-white">
-              <div className="text-xs uppercase tracking-[0.2em] text-white/70">
-                Example payment link
-              </div>
+              <div className="text-xs uppercase tracking-[0.2em] text-white/70">Example payment link</div>
               <div className="mt-3 break-all text-lg font-medium">
-                veloxpay.vercel.app/smart/500/a1b2c3d4
+                veloxpay.vercel.app/pay/HclBCoAgEED...
               </div>
             </div>
 
             <div className="mt-6 space-y-5">
               <div>
-                <div className="text-sm text-slate-500">Amount</div>
-                <div className="mt-1 text-3xl font-semibold text-slate-950">500 USDC</div>
+                <div className="text-sm text-slate-500">Inside your workspace</div>
+                <div className="mt-1 text-3xl font-semibold text-slate-950">Wallet + links</div>
               </div>
               <div>
                 <div className="text-sm text-slate-500">What the payer sees</div>
                 <p className="mt-1 text-sm leading-6 text-slate-600">
                   A clean page with who they are paying, the amount, and one clear pay
-                  button.
+                  button, plus email verification before anything moves.
                 </p>
               </div>
             </div>
@@ -88,30 +86,30 @@ export default function HomePage() {
 
       <section className="grid gap-4 md:grid-cols-3">
         <Card className="bg-white/90">
-          <h2 className="text-lg font-semibold text-slate-900">1. Create a link</h2>
+          <h2 className="text-lg font-semibold text-slate-900">1. Create your wallet</h2>
           <p className="mt-2 text-sm leading-6 text-slate-600">
-            Add an amount and a short note, then generate a link in seconds.
+            Use your email to create or restore the same wallet every time you come back.
           </p>
         </Card>
         <Card className="bg-white/90">
-          <h2 className="text-lg font-semibold text-slate-900">2. Share it anywhere</h2>
+          <h2 className="text-lg font-semibold text-slate-900">2. Send, receive, or link</h2>
           <p className="mt-2 text-sm leading-6 text-slate-600">
-            Drop it in chats, social posts, invoices, or directly to a customer.
+            Use your wallet directly or generate a payment link to collect funds anywhere.
           </p>
         </Card>
         <Card className="bg-white/90">
-          <h2 className="text-lg font-semibold text-slate-900">3. Track payments</h2>
+          <h2 className="text-lg font-semibold text-slate-900">3. Track everything</h2>
           <p className="mt-2 text-sm leading-6 text-slate-600">
-            Keep an eye on every payment from your dashboard without extra steps.
+            Watch balances, wallet activity, payment links, and incoming payments from one dashboard.
           </p>
         </Card>
       </section>
 
       <section className="flex flex-col gap-4 rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-xl font-semibold text-slate-900">Built for simple payments</h2>
+          <h2 className="text-xl font-semibold text-slate-900">Built for simple stablecoin payments</h2>
           <p className="mt-2 text-sm text-slate-600">
-            VeloxPay keeps the payment experience clear and friendly from start to finish.
+            VeloxPay keeps wallet setup, payment links, and checkout inside one clear flow from start to finish.
           </p>
         </div>
         <a

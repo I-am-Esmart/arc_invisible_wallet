@@ -37,11 +37,12 @@ const DEFAULT_OWNER_USERNAME = process.env.PAYMENT_LINK_OWNER_USERNAME || "emman
 const DEFAULT_OWNER_EMAIL = process.env.PAYMENT_LINK_OWNER_EMAIL || "emmanuel@example.com";
 const DEFAULT_LINK_CURRENCY = (process.env.PAYMENT_LINK_DEFAULT_CURRENCY || "USDC").toUpperCase();
 const DEFAULT_LINK_BASE_URL = (process.env.PAYMENT_LINK_BASE_URL || "http://localhost:3000").replace(/\/$/, "");
-const WALLET_APP_BASE_URL = (process.env.WALLET_APP_BASE_URL || "https://arc-wallet.vercel.app").replace(/\/$/, "");
+const WALLET_APP_BASE_URL = (process.env.WALLET_APP_BASE_URL || DEFAULT_LINK_BASE_URL || "https://veloxpay.vercel.app").replace(/\/$/, "");
 const PAYMENT_LINK_SIGNING_SECRET = process.env.PAYMENT_LINK_SIGNING_SECRET || "veloxpay-demo-secret";
 const OTP_CODE_TTL_MINUTES = Math.max(1, Number(process.env.OTP_CODE_TTL_MINUTES || 10));
 const OTP_MAX_ATTEMPTS = Math.max(1, Number(process.env.OTP_MAX_ATTEMPTS || 5));
 const TRANSFER_HISTORY_LOOKBACK_BLOCKS = Math.max(2000, Number(process.env.TRANSFER_HISTORY_LOOKBACK_BLOCKS || 250000));
+const LOG_QUERY_CHUNK_SIZE = Math.max(250, Number(process.env.LOG_QUERY_CHUNK_SIZE || 5000));
 const RESEND_API_URL = "https://api.resend.com/emails";
 
 function normalizeOrigin(origin) {
@@ -347,7 +348,7 @@ function buildWalletCreateUrl(email, paymentLink) {
     params.set("returnTo", buildPaymentLinkUrl(paymentLink));
   }
 
-  return `${WALLET_APP_BASE_URL}/?${params.toString()}`;
+  return `${WALLET_APP_BASE_URL}/login?${params.toString()}`;
 }
 
 function buildUniqueUsername(store, baseUsername, currentEmail) {
@@ -473,6 +474,48 @@ async function fetchBlockTimestamp(blockNumber, cache) {
   return cache.get(blockNumber);
 }
 
+function isLogRangeError(error) {
+  const message = String(error?.message || "");
+  return (
+    message.includes("eth_getLogs is limited to a 10,000 range")
+    || message.includes("query returned more than")
+    || message.includes("block range")
+    || message.includes("-32614")
+  );
+}
+
+async function queryFilterInChunks(contract, filter, fromBlock, toBlock, chunkSize = LOG_QUERY_CHUNK_SIZE) {
+  if (fromBlock > toBlock) {
+    return [];
+  }
+
+  if (chunkSize <= 0) {
+    throw new Error("Invalid log query chunk size");
+  }
+
+  const logs = [];
+
+  for (let start = fromBlock; start <= toBlock; start += chunkSize) {
+    const end = Math.min(toBlock, start + chunkSize - 1);
+
+    try {
+      const batch = await contract.queryFilter(filter, start, end);
+      logs.push(...batch);
+    } catch (error) {
+      if (isLogRangeError(error) && chunkSize > 250) {
+        const smallerChunkSize = Math.max(250, Math.floor(chunkSize / 2));
+        const fallbackLogs = await queryFilterInChunks(contract, filter, start, end, smallerChunkSize);
+        logs.push(...fallbackLogs);
+        continue;
+      }
+
+      throw error;
+    }
+  }
+
+  return logs;
+}
+
 async function fetchTokenTransferHistory(address, { direction = "all" } = {}) {
   if (!ethers.isAddress(address)) {
     return [];
@@ -490,8 +533,8 @@ async function fetchTokenTransferHistory(address, { direction = "all" } = {}) {
       const incomingFilter = contract.filters.Transfer(null, address);
 
       const [outgoingLogs, incomingLogs, decimals] = await Promise.all([
-        direction === "incoming" ? Promise.resolve([]) : contract.queryFilter(outgoingFilter, fromBlock, latestBlock),
-        direction === "outgoing" ? Promise.resolve([]) : contract.queryFilter(incomingFilter, fromBlock, latestBlock),
+        direction === "incoming" ? Promise.resolve([]) : queryFilterInChunks(contract, outgoingFilter, fromBlock, latestBlock),
+        direction === "outgoing" ? Promise.resolve([]) : queryFilterInChunks(contract, incomingFilter, fromBlock, latestBlock),
         contract.decimals()
       ]);
 

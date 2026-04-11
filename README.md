@@ -1,10 +1,10 @@
-# Arc Wallet
+# VeloxPay
 
-An Arc testnet invisible wallet demo built with React, Express, and ethers.js.
+VeloxPay is an Arc testnet wallet and payment-link product built with Next.js, Express, and ethers.js.
 
-The app lets a user log in with email, view USDC and EURC balances, send either stablecoin, copy a receive address, open Arc explorer links, and check locally stored transaction history.
+The main user experience now lives in `next-frontend/`, where a user can create or restore a wallet with email, view USDC and EURC balances, send and receive funds, review wallet activity, create payment links, and track incoming payments from one dashboard.
 
-There is also a separate Next.js payment-links frontend in `next-frontend/` for the VeloxPay payment-link product.
+The older Vite wallet frontend still exists in `frontend/` as a legacy client, but VeloxPay is the primary frontend.
 
 ## Running locally
 
@@ -26,7 +26,8 @@ Important backend env values:
 - `PAYMENT_LINK_BASE_URL=http://localhost:3000`
 - `PAYMENT_LINK_DEFAULT_CURRENCY=USDC`
 - `PAYMENT_LINK_SIGNING_SECRET=change-this-to-a-random-secret`
-- `WALLET_APP_BASE_URL=https://arc-wallet.vercel.app`
+- `WALLET_APP_BASE_URL=https://veloxpay.vercel.app`
+- `LOG_QUERY_CHUNK_SIZE=5000`
 - `SMTP_HOST=smtp.gmail.com`
 - `SMTP_PORT=465`
 - `SMTP_SECURE=true`
@@ -66,7 +67,7 @@ Important Next.js env value:
 
 ## Fresh Vercel deployment
 
-Deploy the backend, the Vite frontend, and the Next.js payment-links frontend as separate Vercel projects if you want both frontends live.
+Deploy the backend and the Next.js VeloxPay frontend as the primary live experience. The older Vite frontend is optional now.
 
 ### Backend project
 
@@ -75,13 +76,14 @@ Root directory:
 
 Required environment variables:
 - `ARC_RPC=https://rpc.testnet.arc.network`
-- `FRONTEND_ORIGIN=https://arc-wallet.vercel.app,https://veloxpay.vercel.app`
+- `FRONTEND_ORIGIN=https://veloxpay.vercel.app`
 - `PAYMENT_LINK_OWNER_EMAIL=your-owner-email@example.com`
 - `PAYMENT_LINK_OWNER_USERNAME=emmanuel`
 - `PAYMENT_LINK_BASE_URL=https://veloxpay.vercel.app`
 - `PAYMENT_LINK_DEFAULT_CURRENCY=USDC`
 - `PAYMENT_LINK_SIGNING_SECRET=change-this-to-a-random-secret`
-- `WALLET_APP_BASE_URL=https://arc-wallet.vercel.app`
+- `WALLET_APP_BASE_URL=https://veloxpay.vercel.app`
+- `LOG_QUERY_CHUNK_SIZE=5000`
 - `SMTP_HOST=smtp.gmail.com`
 - `SMTP_PORT=465`
 - `SMTP_SECURE=true`
@@ -89,15 +91,7 @@ Required environment variables:
 - `SMTP_PASS=your-16-character-google-app-password`
 - `OTP_FROM_EMAIL="VeloxPay <useveloxpay@gmail.com>"`
 
-### Frontend project
-
-Root directory:
-- `frontend`
-
-Required environment variable:
-- `VITE_API_BASE_URL=https://arc-invisible-wallet.vercel.app`
-
-### Next.js payment-links project
+### Next.js frontend project
 
 Root directory:
 - `next-frontend`
@@ -107,17 +101,14 @@ Required environment variable:
 - `NEXT_PUBLIC_BUILDER_X_URL=https://x.com/cryptosmart121`
 
 Current deployed URLs:
-- Wallet app: `https://arc-wallet.vercel.app/`
 - VeloxPay: `https://veloxpay.vercel.app/`
 - Backend: `https://arc-invisible-wallet.vercel.app/`
 
 After deployment:
 1. Copy the backend production URL.
-2. Add that URL as `VITE_API_BASE_URL` in the frontend project.
-3. Copy the frontend production URL.
-4. Add that URL as `FRONTEND_ORIGIN` in the backend project.
-5. Add the backend URL to the Next.js payment-links project as `BACKEND_API_URL`.
-6. Add the Next.js payment-links URL to the backend `FRONTEND_ORIGIN` list and set `PAYMENT_LINK_BASE_URL` to that URL.
+2. Add that URL as `BACKEND_API_URL` in the Next.js frontend project.
+3. Set `FRONTEND_ORIGIN` in the backend project to your VeloxPay frontend URL.
+4. Set `PAYMENT_LINK_BASE_URL` and `WALLET_APP_BASE_URL` in the backend project to your VeloxPay frontend URL.
 7. Redeploy the backend and both frontend projects so the updated env vars are applied.
 
 ## Faucet steps
