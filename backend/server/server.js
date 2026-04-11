@@ -5,6 +5,7 @@ const { ethers } = require("ethers");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
+const zlib = require("zlib");
 const nodemailer = require("nodemailer");
 
 const ERC20_ABI = [
@@ -111,39 +112,66 @@ function generateOtpCode() {
 }
 
 function encodeBase64Url(value) {
-  return Buffer.from(value)
+  const buffer = Buffer.isBuffer(value) ? value : Buffer.from(String(value), "utf8");
+  return buffer
     .toString("base64")
     .replace(/\+/g, "-")
     .replace(/\//g, "_")
     .replace(/=+$/g, "");
 }
 
-function decodeBase64Url(value) {
+function decodeBase64UrlToBuffer(value) {
   const normalized = String(value || "")
     .replace(/-/g, "+")
     .replace(/_/g, "/");
   const padding = normalized.length % 4 === 0 ? "" : "=".repeat(4 - (normalized.length % 4));
-  return Buffer.from(`${normalized}${padding}`, "base64").toString("utf8");
+  return Buffer.from(`${normalized}${padding}`, "base64");
+}
+
+function decodeBase64Url(value) {
+  return decodeBase64UrlToBuffer(value).toString("utf8");
+}
+
+function createSignature(value, byteLength) {
+  const digest = crypto.createHmac("sha256", PAYMENT_LINK_SIGNING_SECRET).update(value).digest();
+  return encodeBase64Url(byteLength ? digest.subarray(0, byteLength) : digest);
 }
 
 function signValue(value) {
-  return encodeBase64Url(
-    crypto.createHmac("sha256", PAYMENT_LINK_SIGNING_SECRET).update(value).digest()
-  );
+  return createSignature(value, 12);
+}
+
+function hasValidSignature(value, signature) {
+  return signature === signValue(value) || signature === createSignature(value);
+}
+
+function parseSignedPayload(payload) {
+  try {
+    return JSON.parse(zlib.inflateRawSync(decodeBase64UrlToBuffer(payload)).toString("utf8"));
+  } catch {
+    try {
+      return JSON.parse(decodeBase64Url(payload));
+    } catch {
+      return null;
+    }
+  }
 }
 
 function buildSignedPaymentLinkCode(paymentLink) {
-  const payload = encodeBase64Url(JSON.stringify({
-    ownerEmail: paymentLink.ownerEmail,
-    ownerName: paymentLink.ownerName,
-    username: paymentLink.username,
-    recipientAddress: paymentLink.recipientAddress,
-    amount: paymentLink.amount,
-    description: paymentLink.description,
-    currency: paymentLink.currency,
-    createdAt: paymentLink.createdAt,
-    nonce: paymentLink.id
-  }));
+  const compactPayload = {
+    e: paymentLink.ownerEmail,
+    n: paymentLink.ownerName,
+    u: paymentLink.username,
+    r: paymentLink.recipientAddress,
+    a: paymentLink.amount,
+    d: paymentLink.description,
+    c: paymentLink.currency,
+    t: paymentLink.createdAt,
+    i: paymentLink.id
+  };
+  const payload = encodeBase64Url(
+    zlib.deflateRawSync(Buffer.from(JSON.stringify(compactPayload), "utf8"), { level: 9 })
+  );
 
   return `${payload}.${signValue(payload)}`;
 }
@@ -151,40 +179,43 @@ function buildSignedPaymentLinkCode(paymentLink) {
 function readPaymentLinkFromCode(linkCode) {
   const [payload, signature] = String(linkCode || "").split(".");
 
-  if (!payload || !signature || signValue(payload) !== signature) {
+  if (!payload || !signature || !hasValidSignature(payload, signature)) {
     return null;
   }
 
-  try {
-    const parsed = JSON.parse(decodeBase64Url(payload));
+  const parsed = parseSignedPayload(payload);
 
-    if (
-      !parsed ||
-      !parsed.ownerEmail ||
-      !parsed.username ||
-      !parsed.recipientAddress ||
-      !parsed.amount ||
-      !parsed.currency
-    ) {
-      return null;
-    }
-
-    return {
-      id: parsed.nonce || linkCode,
-      linkCode,
-      ownerEmail: normalizeEmail(parsed.ownerEmail),
-      ownerName: parsed.ownerName || displayNameFromEmail(parsed.ownerEmail),
-      username: slugifySegment(parsed.username),
-      recipientAddress: parsed.recipientAddress,
-      amount: normalizeAmount(parsed.amount),
-      description: parsed.description || "",
-      currency: normalizeToken(parsed.currency),
-      status: "active",
-      createdAt: parsed.createdAt || new Date().toISOString()
-    };
-  } catch {
+  if (!parsed) {
     return null;
   }
+
+  const ownerEmail = parsed.e || parsed.ownerEmail;
+  const ownerName = parsed.n || parsed.ownerName;
+  const username = parsed.u || parsed.username;
+  const recipientAddress = parsed.r || parsed.recipientAddress;
+  const amount = parsed.a || parsed.amount;
+  const description = parsed.d || parsed.description;
+  const currency = parsed.c || parsed.currency;
+  const createdAt = parsed.t || parsed.createdAt;
+  const nonce = parsed.i || parsed.nonce;
+
+  if (!ownerEmail || !username || !recipientAddress || !amount || !currency) {
+    return null;
+  }
+
+  return {
+    id: nonce || linkCode,
+    linkCode,
+    ownerEmail: normalizeEmail(ownerEmail),
+    ownerName: ownerName || displayNameFromEmail(ownerEmail),
+    username: slugifySegment(username),
+    recipientAddress,
+    amount: normalizeAmount(amount),
+    description: description || "",
+    currency: normalizeToken(currency),
+    status: "active",
+    createdAt: createdAt || new Date().toISOString()
+  };
 }
 
 function buildPaymentChallengeToken({ linkId, payerEmail, codeHash, expiresAt }) {
@@ -434,7 +465,7 @@ async function sendVerificationCodeEmail({ to, code, paymentLink }) {
   `;
 
   const smtpUser = normalizeEmail(process.env.SMTP_USER);
-  const smtpPass = process.env.SMTP_PASS;
+  const smtpPass = process.env.SMTP_PASS || process.env.GMAIL_APP_PASSWORD;
   const smtpHost = process.env.SMTP_HOST || "smtp.gmail.com";
   const smtpPort = Number(process.env.SMTP_PORT || 465);
   const smtpSecure = String(process.env.SMTP_SECURE || "true").toLowerCase() !== "false";
@@ -451,12 +482,28 @@ async function sendVerificationCodeEmail({ to, code, paymentLink }) {
       }
     });
 
-    await transporter.sendMail({
-      from: smtpFrom,
-      to,
-      subject,
-      html
-    });
+    try {
+      await transporter.sendMail({
+        from: smtpFrom,
+        to,
+        subject,
+        html
+      });
+    } catch (error) {
+      const message = String(error?.message || "");
+
+      if (
+        message.includes("535-5.7.8")
+        || message.includes("BadCredentials")
+        || message.includes("Username and Password not accepted")
+      ) {
+        throw new Error(
+          "Gmail rejected the login. Turn on 2-Step Verification for the Gmail account and set SMTP_PASS to a Google App Password, not the normal Gmail password."
+        );
+      }
+
+      throw error;
+    }
     return;
   }
 
