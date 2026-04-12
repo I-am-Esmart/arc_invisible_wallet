@@ -14,6 +14,19 @@ body {
   @apply bg-slate-50 text-slate-900 antialiased;
 }
 
+html.theme-ready body,
+html.theme-ready body *,
+html.theme-ready body *::before,
+html.theme-ready body *::after {
+  transition:
+    background-color 260ms ease,
+    border-color 260ms ease,
+    color 260ms ease,
+    box-shadow 260ms ease,
+    fill 260ms ease,
+    stroke 260ms ease;
+}
+
 a {
   @apply text-brand-600;
 }

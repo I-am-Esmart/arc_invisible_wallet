@@ -12,6 +12,9 @@ export function ThemeToggle() {
     const nextTheme = savedTheme === "dark" ? "dark" : "light";
     setTheme(nextTheme);
     document.documentElement.classList.toggle("dark", nextTheme === "dark");
+    window.setTimeout(() => {
+      document.documentElement.classList.add("theme-ready");
+    }, 0);
   }, []);
 
   function toggleTheme() {

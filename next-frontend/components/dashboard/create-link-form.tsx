@@ -6,6 +6,7 @@ import { createPaymentLinkAction, type CreateLinkActionState } from "@/app/creat
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Field } from "@/components/ui/field";
+import { upsertStoredPaymentLink } from "@/lib/session/payment-links";
 import type { WalletUser } from "@/lib/types/wallet";
 
 const initialState: CreateLinkActionState = {
@@ -22,7 +23,7 @@ export function CreateLinkForm({
 }: {
   compact?: boolean;
   walletUser?: WalletUser | null;
-  onCreated?: (url?: string) => void;
+  onCreated?: (paymentLink?: CreateLinkActionState["paymentLink"]) => void;
 }) {
   const router = useRouter();
   const [state, formAction, isPending] = useActionState(createPaymentLinkAction, initialState);
@@ -71,6 +72,9 @@ export function CreateLinkForm({
       if (ownerEmail) {
         localStorage.setItem(OWNER_EMAIL_KEY, ownerEmail);
         syncOwnerCookies(ownerEmail, ownerName);
+        if (state.paymentLink) {
+          upsertStoredPaymentLink(ownerEmail, state.paymentLink);
+        }
       }
 
       if (ownerName) {
@@ -79,9 +83,9 @@ export function CreateLinkForm({
 
       setCopied(false);
       router.refresh();
-      onCreated?.(state.url);
+      onCreated?.(state.paymentLink);
     }
-  }, [compact, onCreated, ownerEmail, ownerName, router, state.status, state.url]);
+  }, [compact, onCreated, ownerEmail, ownerName, router, state.paymentLink, state.status]);
 
   async function handleCopyLink() {
     if (!state.url) {

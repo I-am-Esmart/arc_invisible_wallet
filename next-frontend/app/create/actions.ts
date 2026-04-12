@@ -1,11 +1,13 @@
 "use server";
 
 import { createPaymentLink } from "@/lib/api/payment-links";
+import type { PaymentLink } from "@/lib/types/payment-link";
 
 export type CreateLinkActionState = {
   status: "idle" | "success" | "error";
   message?: string;
   url?: string;
+  paymentLink?: PaymentLink;
 };
 
 export async function createPaymentLinkAction(
@@ -50,6 +52,7 @@ export async function createPaymentLinkAction(
       status: "success",
       message: "Payment link created successfully.",
       url: paymentLink.url,
+      paymentLink,
     };
   } catch (error) {
     return {

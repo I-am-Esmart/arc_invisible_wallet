@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { fetchWalletBalances, fetchWalletTransactions, sendWalletTransaction } from "@/lib/api/wallet";
 import { listPaymentLinks } from "@/lib/api/payment-links";
 import { listPayments } from "@/lib/api/payments";
+import { mergeAndStorePaymentLinks, readStoredPaymentLinks } from "@/lib/session/payment-links";
 import { clearWalletUser, getStoredWalletUser } from "@/lib/session/wallet";
 import type { PaymentLink } from "@/lib/types/payment-link";
 import type { Payment } from "@/lib/types/payment";
@@ -75,9 +76,17 @@ export function useVeloxPayData(options: Options = {}) {
     }
 
     if (includeLinks) {
+      const cachedLinks = readStoredPaymentLinks(user.email);
+      if (cachedLinks.length) {
+        setPaymentLinks(cachedLinks);
+      }
+
       tasks.push(
         listPaymentLinks(user.email)
-          .then((result) => setPaymentLinks(result))
+          .then((result) => {
+            const mergedLinks = mergeAndStorePaymentLinks(user.email, result);
+            setPaymentLinks(mergedLinks);
+          })
           .catch((error) => {
             nextErrors.links =
               error instanceof Error ? error.message : "Unable to load payment links.";
@@ -180,7 +189,8 @@ export function useVeloxPayData(options: Options = {}) {
 
       try {
         const result = await listPaymentLinks(walletUser.email);
-        setPaymentLinks(result);
+        const mergedLinks = mergeAndStorePaymentLinks(walletUser.email, result);
+        setPaymentLinks(mergedLinks);
         setErrors((current) => ({ ...current, links: "" }));
       } catch (error) {
         setErrors((current) => ({
