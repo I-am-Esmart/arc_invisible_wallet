@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { VeloxPayLogo } from "@/components/brand/veloxpay-logo";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { checkBackend, loginWallet } from "@/lib/api/wallet";
@@ -90,9 +91,14 @@ export function LoginPageClient() {
   return (
     <main className="mx-auto max-w-md">
       <Card className="rounded-[2rem] p-8 sm:p-10">
-        <p className="inline-flex rounded-full bg-brand-50 px-4 py-1 text-sm font-medium uppercase tracking-[0.18em] text-brand-700">
-          VeloxPay wallet
-        </p>
+        <div className="flex items-center gap-4">
+          <VeloxPayLogo className="h-14 w-14" />
+          <div>
+            <p className="inline-flex rounded-full bg-brand-50 px-4 py-1 text-sm font-medium uppercase tracking-[0.18em] text-brand-700">
+              VeloxPay wallet
+            </p>
+          </div>
+        </div>
         <h1 className="mt-5 text-4xl font-semibold tracking-tight text-slate-950">
           Create or restore your wallet
         </h1>

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { VeloxPayLogo } from "@/components/brand/veloxpay-logo";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 
@@ -23,9 +24,12 @@ export default function HomePage() {
       <section className="overflow-hidden rounded-[2rem] bg-[radial-gradient(circle_at_top_left,_rgba(37,99,235,0.18),_transparent_28%),linear-gradient(135deg,_#ffffff,_#f8fbff_45%,_#eef5ff)] p-8 shadow-sm ring-1 ring-slate-200 sm:p-12">
         <div className="grid gap-10 lg:grid-cols-[1.2fr_0.8fr] lg:items-center">
           <div>
-            <p className="inline-flex rounded-full bg-brand-50 px-4 py-1 text-sm font-medium tracking-[0.18em] text-brand-700 uppercase">
-              VeloxPay
-            </p>
+            <div className="flex items-center gap-4">
+              <VeloxPayLogo className="h-16 w-16" />
+              <p className="inline-flex rounded-full bg-brand-50 px-4 py-1 text-sm font-medium tracking-[0.18em] text-brand-700 uppercase">
+                VeloxPay
+              </p>
+            </div>
             <h1 className="mt-5 max-w-3xl text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl">
               One wallet for sending, receiving, and getting paid by link.
             </h1>
@@ -60,6 +64,12 @@ export default function HomePage() {
           </div>
 
           <Card className="border border-white/70 bg-white/85 p-7 backdrop-blur">
+            <div className="mb-6 flex items-center justify-between gap-4">
+              <VeloxPayLogo className="h-14 w-14" showWordmark textClassName="text-2xl font-semibold tracking-tight text-slate-950" />
+              <div className="rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-brand-700">
+                unified checkout
+              </div>
+            </div>
             <div className="rounded-2xl bg-slate-950 p-5 text-white">
               <div className="text-xs uppercase tracking-[0.2em] text-white/70">Example payment link</div>
               <div className="mt-3 break-all text-lg font-medium">

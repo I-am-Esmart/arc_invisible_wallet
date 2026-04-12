@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { VeloxPayLogo } from "@/components/brand/veloxpay-logo";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { clearWalletUser, getStoredWalletUser } from "@/lib/session/wallet";
@@ -52,8 +53,8 @@ export function AppHeader() {
         <div className="flex items-center justify-between gap-4">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-3">
-              <Link href="/" className="text-xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">
-                VeloxPay
+              <Link href="/" className="inline-flex items-center gap-3">
+                <VeloxPayLogo className="h-10 w-10" showWordmark />
               </Link>
               <span className="rounded-full bg-brand-50 px-3 py-1 text-xs font-medium uppercase tracking-[0.18em] text-brand-700 dark:bg-slate-800 dark:text-brand-300">
                 Arc wallet + payments
