@@ -12,9 +12,11 @@ const initialState: PayActionState = {
 export function PayButton({
   action,
   username,
+  linkToken,
 }: {
   action: (state: PayActionState, formData: FormData) => Promise<PayActionState>;
   username: string;
+  linkToken?: string;
 }) {
   const [state, formAction, isPending] = useActionState(action, initialState);
   const [payerEmail, setPayerEmail] = useState("");
@@ -36,6 +38,7 @@ export function PayButton({
     <div>
       <form action={formAction} className="space-y-4">
         <input type="hidden" name="challengeId" value={state.challengeId || ""} />
+        <input type="hidden" name="linkToken" value={linkToken || ""} />
 
         <label className="block space-y-2">
           <span className="text-sm font-medium text-slate-700">Your email</span>

@@ -7,6 +7,7 @@ export type PaymentLink = {
   ownerName?: string;
   ownerEmail?: string;
   linkCode?: string;
+  linkToken?: string;
   amount: string;
   description?: string;
   currency: PaymentCurrency;

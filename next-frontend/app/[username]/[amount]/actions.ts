@@ -22,6 +22,7 @@ export async function payForPaymentLink(
   const payerEmail = String(formData.get("payerEmail") || "").trim();
   const verificationCode = String(formData.get("verificationCode") || "").trim();
   const challengeId = String(formData.get("challengeId") || previousState.challengeId || "").trim();
+  const linkToken = String(formData.get("linkToken") || "").trim();
 
   if (!payerEmail) {
     return {
@@ -53,6 +54,7 @@ export async function payForPaymentLink(
         payerEmail,
         verificationCode,
         challengeId,
+        linkToken,
       });
 
       return {
@@ -64,7 +66,7 @@ export async function payForPaymentLink(
       };
     }
 
-    const challenge = await startPaymentForLink(linkId, payerEmail);
+    const challenge = await startPaymentForLink(linkId, payerEmail, linkToken);
 
     return {
       status: "code_sent",

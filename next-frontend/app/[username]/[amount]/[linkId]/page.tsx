@@ -9,12 +9,16 @@ type PaymentLinkPageProps = {
     amount: string;
     linkId: string;
   }>;
+  searchParams: Promise<{
+    k?: string;
+  }>;
 };
 
-export default async function PaymentLinkWithCodePage({ params }: PaymentLinkPageProps) {
+export default async function PaymentLinkWithCodePage({ params, searchParams }: PaymentLinkPageProps) {
   const { username, amount, linkId } = await params;
+  const { k } = await searchParams;
 
-  const paymentLink = await getPaymentLinkByRoute(username, amount, linkId);
+  const paymentLink = await getPaymentLinkByRoute(username, amount, linkId, k);
 
   if (!paymentLink) {
     notFound();

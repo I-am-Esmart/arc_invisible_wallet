@@ -8,7 +8,12 @@ type PaymentLinkPayload = {
   ownerName?: string;
 };
 
-export async function getPaymentLinkByRoute(username?: string, amount?: string, linkId?: string) {
+export async function getPaymentLinkByRoute(
+  username?: string,
+  amount?: string,
+  linkId?: string,
+  linkToken?: string,
+) {
   try {
     const params = new URLSearchParams();
 
@@ -22,6 +27,10 @@ export async function getPaymentLinkByRoute(username?: string, amount?: string, 
 
     if (linkId) {
       params.set("linkId", linkId);
+    }
+
+    if (linkToken) {
+      params.set("k", linkToken);
     }
 
     return await backendFetch<PaymentLink | null>(

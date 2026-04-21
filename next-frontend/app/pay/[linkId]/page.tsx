@@ -7,11 +7,15 @@ type PaymentLinkByIdPageProps = {
   params: Promise<{
     linkId: string;
   }>;
+  searchParams: Promise<{
+    k?: string;
+  }>;
 };
 
-export default async function PaymentLinkByIdPage({ params }: PaymentLinkByIdPageProps) {
+export default async function PaymentLinkByIdPage({ params, searchParams }: PaymentLinkByIdPageProps) {
   const { linkId } = await params;
-  const paymentLink = await getPaymentLinkByRoute(undefined, undefined, linkId);
+  const { k } = await searchParams;
+  const paymentLink = await getPaymentLinkByRoute(undefined, undefined, linkId, k);
 
   if (!paymentLink) {
     notFound();

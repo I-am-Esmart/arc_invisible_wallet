@@ -42,7 +42,7 @@ export function PaymentLinkCard({
       </div>
 
       <div className="mt-8">
-        <PayButton action={payAction} username={payeeName} />
+        <PayButton action={payAction} username={payeeName} linkToken={paymentLink.linkToken} />
       </div>
     </Card>
   );
