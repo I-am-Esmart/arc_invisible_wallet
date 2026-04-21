@@ -14,7 +14,7 @@ function getLinkPath(link: PaymentLink) {
   }
 
   if (link.linkCode) {
-    return `/pay/${link.linkCode}`;
+    return `/${link.username}/${link.amount}/${link.linkCode}`;
   }
 
   return `/${link.username}/${link.amount}`;

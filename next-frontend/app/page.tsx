@@ -73,7 +73,7 @@ export default function HomePage() {
             <div className="rounded-2xl bg-slate-950 p-5 text-white">
               <div className="text-xs uppercase tracking-[0.2em] text-white/70">Example payment link</div>
               <div className="mt-3 break-all text-lg font-medium">
-                veloxpay.vercel.app/pay/HclBCoAgEED...
+                veloxpay.vercel.app/smart/50/9f2c1a4b7d8e6c0f1a2b
               </div>
             </div>
 

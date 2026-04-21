@@ -188,6 +188,24 @@ function buildSignedPaymentLinkCode(paymentLink) {
   return `${payload}.${signValue(payload)}`;
 }
 
+function generateShortPaymentLinkCode(store) {
+  const existingCodes = new Set(
+    (store.paymentLinks || [])
+      .map((link) => String(link?.linkCode || "").trim())
+      .filter(Boolean)
+  );
+
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const candidate = crypto.randomBytes(10).toString("hex");
+
+    if (!existingCodes.has(candidate)) {
+      return candidate;
+    }
+  }
+
+  return crypto.randomUUID().replace(/-/g, "").slice(0, 20);
+}
+
 function readPaymentLinkFromCode(linkCode) {
   const [payload, signature] = String(linkCode || "").split(".");
 
@@ -323,6 +341,10 @@ function cleanExpiredPaymentSessions(store) {
 }
 
 function buildPaymentLinkPath(paymentLink) {
+  if (paymentLink.linkCode && paymentLink.username && paymentLink.amount) {
+    return `/${paymentLink.username}/${paymentLink.amount}/${paymentLink.linkCode}`;
+  }
+
   if (paymentLink.linkCode) {
     return `/pay/${paymentLink.linkCode}`;
   }
@@ -335,6 +357,10 @@ function buildPaymentLinkUrl(paymentLink) {
 }
 
 function buildPaymentLinkLabel(paymentLink) {
+  if (paymentLink.linkCode && paymentLink.username && paymentLink.amount) {
+    return `/${paymentLink.username}/${paymentLink.amount}/${paymentLink.linkCode}`;
+  }
+
   if (paymentLink.linkCode) {
     return `/pay/${paymentLink.linkCode}`;
   }
@@ -1146,7 +1172,7 @@ app.post("/payment-links", async (req, res) => {
       createdAt: new Date().toISOString()
     };
 
-    paymentLink.linkCode = buildSignedPaymentLinkCode(paymentLink);
+    paymentLink.linkCode = generateShortPaymentLinkCode(store);
     paymentLink.url = buildPaymentLinkUrl(paymentLink);
     store.paymentLinks.push(paymentLink);
     writeStore(store);
