@@ -103,12 +103,16 @@ export function CreateLinkForm({
 
   return (
     <Card className={compact ? "" : "max-w-2xl"}>
-      <h2 className="text-xl font-semibold text-slate-900">Create a payment link</h2>
+      <h2 className="text-xl font-semibold text-slate-900">Create a payment request</h2>
       <p className="mt-2 text-sm text-slate-600">
         {walletUser?.email
-          ? "Your wallet is already connected, so you can generate a payment link in seconds."
-          : "Add your wallet email once and we&apos;ll remember it here for the next link you make."}
+          ? "Your wallet is already connected, so you can create an invoice-style payment request in seconds."
+          : "Add your wallet email once and we&apos;ll remember it here for the next payment request you create."}
       </p>
+
+      <div className="mt-4 rounded-2xl bg-slate-50 p-4 text-sm leading-6 text-slate-600">
+        Use this when you want to charge a client, collect for a service, request a deposit, or share a simple pay-me link.
+      </div>
 
       <form action={formAction} className="mt-6 space-y-5">
         <input name="ownerEmail" type="hidden" value={ownerEmail} />
@@ -117,7 +121,7 @@ export function CreateLinkForm({
         {walletUser?.email ? (
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
             <div className="text-sm font-medium text-slate-900">
-              Creating as {ownerName || walletUser.email}
+              Creating payment requests as {ownerName || walletUser.email}
             </div>
             <div className="mt-1 text-sm text-slate-500">{ownerEmail}</div>
           </div>
@@ -140,7 +144,7 @@ export function CreateLinkForm({
 
             <Field
               label="Name"
-              hint="We&apos;ll show this on your payment page so people know who they&apos;re paying."
+              hint="We&apos;ll show this on the payment request so people know who they&apos;re paying."
             >
               <input
                 name="ownerNameVisible"
@@ -156,7 +160,7 @@ export function CreateLinkForm({
 
         <Field
           label="Amount"
-          hint="Required. We&apos;ll include a unique ID too, so similar links never clash."
+          hint="Required. This is the amount the payer will see right away."
         >
           <input
             name="amount"
@@ -167,7 +171,7 @@ export function CreateLinkForm({
           />
         </Field>
 
-        <Field label="Description" hint="Optional. Keep it short and clear for the payer.">
+        <Field label="Description" hint="Optional. Tell the payer exactly what this request is for.">
           <textarea
             name="description"
             rows={4}
@@ -177,7 +181,7 @@ export function CreateLinkForm({
         </Field>
 
         <Button type="submit" disabled={isPending}>
-          {isPending ? "Creating..." : "Create payment link"}
+          {isPending ? "Creating..." : "Create payment request"}
         </Button>
       </form>
 
@@ -191,16 +195,24 @@ export function CreateLinkForm({
         >
           <p>{state.message}</p>
           {state.url ? (
-            <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-start">
-              <p className="min-w-0 flex-1 break-all font-medium text-slate-800">{state.url}</p>
-              <button
-                type="button"
-                onClick={handleCopyLink}
-                className="inline-flex shrink-0 items-center justify-center rounded-xl bg-white px-3 py-2 text-xs font-semibold text-slate-700 ring-1 ring-slate-200 transition hover:bg-slate-50"
-              >
-                {copied ? "Copied" : "Copy link"}
-              </button>
-            </div>
+            <>
+              <p className="mt-2 text-sm">
+                Your request is ready. Send this link to the person who should pay you.
+              </p>
+              <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-start">
+                <p className="min-w-0 flex-1 break-all font-medium text-slate-800">{state.url}</p>
+                <button
+                  type="button"
+                  onClick={handleCopyLink}
+                  className="inline-flex shrink-0 items-center justify-center rounded-xl bg-white px-3 py-2 text-xs font-semibold text-slate-700 ring-1 ring-slate-200 transition hover:bg-slate-50"
+                >
+                  {copied ? "Copied" : "Copy link"}
+                </button>
+              </div>
+              <div className="mt-3 rounded-xl bg-white/80 p-3 text-xs leading-5 text-slate-600 ring-1 ring-emerald-100">
+                What happens next: the payer opens the link, sees who they are paying, confirms the amount, and completes the payment from one page.
+              </div>
+            </>
           ) : null}
         </div>
       ) : null}

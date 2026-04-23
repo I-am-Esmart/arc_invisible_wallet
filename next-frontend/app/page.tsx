@@ -31,12 +31,12 @@ export default function HomePage() {
               </p>
             </div>
             <h1 className="mt-5 max-w-3xl text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl">
-              One wallet for sending, receiving, and getting paid by link.
+              One wallet for sending, receiving, and getting paid by request.
             </h1>
             <p className="mt-5 max-w-2xl text-lg leading-8 text-slate-600">
-              VeloxPay brings your wallet and payment links into one place. Create or
-              restore your wallet once, send USDC or EURC, receive funds, share payment
-              links, and track everything from the same workspace.
+              VeloxPay brings your wallet and payment requests into one place. Create or
+              restore your wallet once, send USDC or EURC, receive funds, create a simple
+              invoice-style payment request, and track everything from the same workspace.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <Button asChild>
@@ -53,8 +53,8 @@ export default function HomePage() {
                 <div>Create once and use it across every payment flow.</div>
               </div>
               <div>
-                <div className="font-semibold text-slate-900">Shareable links</div>
-                <div>Collect payments in DMs, bios, invoices, and posts.</div>
+                <div className="font-semibold text-slate-900">Invoice-style requests</div>
+                <div>Ask to be paid with one clean link you can send anywhere.</div>
               </div>
               <div>
                 <div className="font-semibold text-slate-900">One clear dashboard</div>
@@ -80,13 +80,12 @@ export default function HomePage() {
             <div className="mt-6 space-y-5">
               <div>
                 <div className="text-sm text-slate-500">Inside your workspace</div>
-                <div className="mt-1 text-3xl font-semibold text-slate-950">Wallet + links</div>
+                <div className="mt-1 text-3xl font-semibold text-slate-950">Wallet + payment requests</div>
               </div>
               <div>
                 <div className="text-sm text-slate-500">What the payer sees</div>
                 <p className="mt-1 text-sm leading-6 text-slate-600">
-                  A clean page with who they are paying, the amount, and one clear pay
-                  button, plus email verification before anything moves.
+                  A clean page showing who they are paying, how much to send, and one clear button to complete the payment.
                 </p>
               </div>
             </div>
@@ -104,7 +103,7 @@ export default function HomePage() {
         <Card className="bg-white/90">
           <h2 className="text-lg font-semibold text-slate-900">2. Send, receive, or link</h2>
           <p className="mt-2 text-sm leading-6 text-slate-600">
-            Use your wallet directly or generate a payment link to collect funds anywhere.
+            Use your wallet directly or generate a payment request to collect funds anywhere.
           </p>
         </Card>
         <Card className="bg-white/90">
@@ -119,7 +118,7 @@ export default function HomePage() {
         <div>
           <h2 className="text-xl font-semibold text-slate-900">Built for simple stablecoin payments</h2>
           <p className="mt-2 text-sm text-slate-600">
-            VeloxPay keeps wallet setup, payment links, and checkout inside one clear flow from start to finish.
+            VeloxPay keeps wallet setup, payment requests, and checkout inside one clear flow from start to finish.
           </p>
         </div>
         <a

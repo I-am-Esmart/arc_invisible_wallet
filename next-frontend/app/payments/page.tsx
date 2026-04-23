@@ -21,7 +21,7 @@ export default function PaymentsPage() {
           <p className="text-sm font-medium uppercase tracking-[0.2em] text-brand-600">Incoming payments</p>
           <h1 className="mt-2 text-3xl font-semibold text-slate-900">Track what lands in your wallet</h1>
           <p className="mt-3 max-w-2xl text-sm text-slate-600">
-            Review completed payment-link checkouts and incoming wallet transfers from one screen.
+            Review completed payment requests and incoming wallet transfers from one screen.
           </p>
         </div>
         <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600">

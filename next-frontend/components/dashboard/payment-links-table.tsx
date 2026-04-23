@@ -29,25 +29,25 @@ export function PaymentLinksTable({
     <Card>
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h2 className="text-lg font-semibold text-slate-900">Payment links</h2>
+          <h2 className="text-lg font-semibold text-slate-900">Payment requests</h2>
           <p className="mt-1 text-sm text-slate-600">
-            All public links generated for sharing.
+            Every request you can share to ask for payment.
           </p>
         </div>
       </div>
 
       {paymentLinks.length === 0 ? (
         <div className="mt-6 rounded-2xl border border-dashed border-slate-200 p-8 text-sm text-slate-500">
-          No payment links yet.
+          No payment requests yet. Create one to send a simple pay-me link.
         </div>
       ) : (
         <div className="mt-6 overflow-x-auto">
           <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
             <thead>
               <tr className="text-slate-500">
-                <th className="py-3 pr-6 font-medium">Link</th>
+                <th className="py-3 pr-6 font-medium">Request link</th>
                 <th className="py-3 pr-6 font-medium">Amount</th>
-                <th className="py-3 pr-6 font-medium">Description</th>
+                <th className="py-3 pr-6 font-medium">What it&apos;s for</th>
                 <th className="py-3 pr-6 font-medium">Status</th>
                 <th className="py-3 font-medium">Created</th>
               </tr>

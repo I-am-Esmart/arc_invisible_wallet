@@ -37,7 +37,7 @@ export function AppHeader() {
         ? [
             { href: "/dashboard", label: "Overview" },
             { href: "/wallet", label: "Wallet" },
-            { href: "/links", label: "Links" },
+            { href: "/links", label: "Get paid" },
             { href: "/payments", label: "Payments" },
           ]
         : [

@@ -32,7 +32,7 @@ export default function DashboardPage() {
           Welcome back, {walletUser.displayName || walletUser.username || "there"}
         </h1>
         <p className="mt-5 max-w-3xl text-lg leading-8 text-slate-600">
-          Your wallet and payment tools now live in one place. Use the pages below to move money, collect by link, and track what&apos;s happening.
+          VeloxPay helps you hold stablecoins, send money, and create shareable payment requests. Think of the payment-request feature like a simple invoice link you can send to a client, customer, or friend.
         </p>
       </section>
 
@@ -70,6 +70,46 @@ export default function DashboardPage() {
         </Card>
       </section>
 
+      <section className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+        <Card>
+          <h2 className="text-lg font-semibold text-slate-900">How payment requests work</h2>
+          <div className="mt-5 grid gap-4 md:grid-cols-3">
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <div className="text-sm font-semibold text-slate-900">1. Create a request</div>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                Enter an amount and short description to turn it into a shareable payment request.
+              </p>
+            </div>
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <div className="text-sm font-semibold text-slate-900">2. Share the link</div>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                Send it in a DM, post, invoice, email, or anywhere you normally ask to be paid.
+              </p>
+            </div>
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <div className="text-sm font-semibold text-slate-900">3. Get paid</div>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                The payer opens a clean page, confirms the payment, and it shows up in your records.
+              </p>
+            </div>
+          </div>
+        </Card>
+
+        <Card>
+          <h2 className="text-lg font-semibold text-slate-900">Good use cases</h2>
+          <div className="mt-4 space-y-3 text-sm leading-6 text-slate-600">
+            <p>Freelance work like design, writing, or consulting.</p>
+            <p>Event tickets, digital products, or creator support.</p>
+            <p>Simple payment requests for friends, teams, and communities.</p>
+          </div>
+          <div className="mt-5">
+            <Button asChild>
+              <Link href="/links">Create a payment request</Link>
+            </Button>
+          </div>
+        </Card>
+      </section>
+
       <section className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
         <Card>
           <h2 className="text-lg font-semibold text-slate-900">Wallet</h2>
@@ -96,13 +136,13 @@ export default function DashboardPage() {
         </Card>
 
         <Card>
-          <h2 className="text-lg font-semibold text-slate-900">Payment links</h2>
+          <h2 className="text-lg font-semibold text-slate-900">Get paid by link</h2>
           <p className="mt-2 text-sm leading-6 text-slate-600">
-            Create shareable links, copy them fast, and keep all your link records together.
+            Create invoice-style payment requests you can share in seconds and track from one place.
           </p>
           <div className="mt-5">
             <Button asChild>
-              <Link href="/links">Manage links</Link>
+              <Link href="/links">Open get paid</Link>
             </Button>
           </div>
         </Card>
