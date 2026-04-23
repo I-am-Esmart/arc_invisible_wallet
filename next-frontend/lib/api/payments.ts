@@ -3,6 +3,7 @@ import type { Payment } from "@/lib/types/payment";
 
 type PaymentChallenge = {
   challengeId: string;
+  linkToken?: string;
   payerEmail: string;
   message: string;
 };

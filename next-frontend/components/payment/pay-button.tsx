@@ -38,7 +38,7 @@ export function PayButton({
     <div>
       <form action={formAction} className="space-y-4">
         <input type="hidden" name="challengeId" value={state.challengeId || ""} />
-        <input type="hidden" name="linkToken" value={linkToken || ""} />
+        <input type="hidden" name="linkToken" value={state.linkToken || linkToken || ""} />
 
         <label className="block space-y-2">
           <span className="text-sm font-medium text-slate-700">Your email</span>

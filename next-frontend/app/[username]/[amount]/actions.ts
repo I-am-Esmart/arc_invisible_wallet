@@ -7,6 +7,7 @@ export type PayActionState = {
   status: "idle" | "code_sent" | "success" | "error";
   message?: string;
   challengeId?: string;
+  linkToken?: string;
   payerEmail?: string;
   transactionHash?: string;
   explorerUrl?: string;
@@ -22,7 +23,7 @@ export async function payForPaymentLink(
   const payerEmail = String(formData.get("payerEmail") || "").trim();
   const verificationCode = String(formData.get("verificationCode") || "").trim();
   const challengeId = String(formData.get("challengeId") || previousState.challengeId || "").trim();
-  const linkToken = String(formData.get("linkToken") || "").trim();
+  const linkToken = String(formData.get("linkToken") || previousState.linkToken || "").trim();
 
   if (!payerEmail) {
     return {
@@ -38,6 +39,7 @@ export async function payForPaymentLink(
           status: "error",
           message: "Enter the verification code from your email.",
           challengeId,
+          linkToken,
           payerEmail,
         };
       }
@@ -46,6 +48,7 @@ export async function payForPaymentLink(
         return {
           status: "error",
           message: "Request a verification code first.",
+          linkToken,
           payerEmail,
         };
       }
@@ -60,6 +63,7 @@ export async function payForPaymentLink(
       return {
         status: "success",
         message: "Payment submitted successfully.",
+        linkToken,
         payerEmail,
         transactionHash: payment.transactionHash,
         explorerUrl: payment.explorerUrl,
@@ -72,6 +76,7 @@ export async function payForPaymentLink(
       status: "code_sent",
       message: challenge.message || "We sent a verification code to your email.",
       challengeId: challenge.challengeId,
+      linkToken: challenge.linkToken || linkToken,
       payerEmail: challenge.payerEmail || payerEmail,
     };
   } catch (error) {
@@ -80,6 +85,7 @@ export async function payForPaymentLink(
         status: "error",
         message: error.message,
         challengeId: intent === "confirm-payment" ? challengeId : undefined,
+        linkToken,
         payerEmail,
         createWalletUrl: typeof error.payload?.createWalletUrl === "string"
           ? error.payload.createWalletUrl
@@ -91,6 +97,7 @@ export async function payForPaymentLink(
       status: "error",
       message: error instanceof Error ? error.message : "Unable to process payment.",
       challengeId: intent === "confirm-payment" ? challengeId : undefined,
+      linkToken,
       payerEmail,
     };
   }

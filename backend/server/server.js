@@ -310,12 +310,13 @@ function readPaymentLinkFromCode(linkCode) {
   };
 }
 
-function buildPaymentChallengeToken({ linkId, payerEmail, codeHash, expiresAt }) {
+function buildPaymentChallengeToken({ linkId, payerEmail, codeHash, expiresAt, linkToken }) {
   const payload = encodeBase64Url(JSON.stringify({
     linkId,
     payerEmail,
     codeHash,
-    expiresAt
+    expiresAt,
+    linkToken: String(linkToken || "")
   }));
 
   return `${payload}.${signValue(payload)}`;
@@ -339,7 +340,8 @@ function readPaymentChallengeToken(token) {
       linkId: String(parsed.linkId),
       payerEmail: normalizeEmail(parsed.payerEmail),
       codeHash: String(parsed.codeHash),
-      expiresAt: String(parsed.expiresAt)
+      expiresAt: String(parsed.expiresAt),
+      linkToken: String(parsed.linkToken || "")
     };
   } catch {
     return null;
@@ -422,6 +424,18 @@ function buildPaymentLinkUrl(paymentLink) {
   }
 
   return baseUrl;
+}
+
+function hydratePaymentLinkAccess(paymentLink) {
+  if (!paymentLink || !paymentLink.linkCode) {
+    return paymentLink;
+  }
+
+  if (!paymentLink.linkToken) {
+    paymentLink.linkToken = buildPaymentLinkToken(paymentLink);
+  }
+
+  return paymentLink;
 }
 
 function buildPaymentLinkLabel(paymentLink) {
@@ -540,6 +554,7 @@ function resolvePaymentLink(store, { linkId, username, amount, linkToken }) {
       (!normalizedUsername || fromCode.username === normalizedUsername) &&
       (!normalizedAmount || fromCode.amount === normalizedAmount)
     ) {
+      hydratePaymentLinkAccess(fromCode);
       fromCode.url = buildPaymentLinkUrl(fromCode);
       return fromCode;
     }
@@ -547,7 +562,7 @@ function resolvePaymentLink(store, { linkId, username, amount, linkToken }) {
 
   const candidates = [...store.paymentLinks].reverse();
 
-  return candidates.find((link) => {
+  const storedLink = candidates.find((link) => {
     if (normalizedUsername && link.username !== normalizedUsername) {
       return false;
     }
@@ -566,6 +581,14 @@ function resolvePaymentLink(store, { linkId, username, amount, linkToken }) {
 
     return link.linkCode === normalizedLinkId || link.id === normalizedLinkId;
   }) || null;
+
+  if (!storedLink) {
+    return null;
+  }
+
+  hydratePaymentLinkAccess(storedLink);
+  storedLink.url = buildPaymentLinkUrl(storedLink);
+  return storedLink;
 }
 
 async function fetchBlockTimestamp(blockNumber, cache) {
@@ -1183,7 +1206,7 @@ app.get("/payment-links", (req, res) => {
       .filter((link) => !ownerEmail || link.ownerEmail === ownerEmail)
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       .map((link) => ({
-        ...link,
+        ...hydratePaymentLinkAccess(link),
         url: buildPaymentLinkUrl(link)
       }));
 
@@ -1212,6 +1235,7 @@ app.get("/payment-links/resolve", (req, res) => {
       return res.status(404).json({ error: "Payment link not found" });
     }
 
+    hydratePaymentLinkAccess(paymentLink);
     paymentLink.url = buildPaymentLinkUrl(paymentLink);
     res.json(paymentLink);
   } catch (err) {
@@ -1335,13 +1359,15 @@ app.post("/payment-links/:linkId/send-code", async (req, res) => {
       return res.status(400).json({ error: "Payer email is required" });
     }
 
+    hydratePaymentLinkAccess(paymentLink);
     const code = generateOtpCode();
     const expiresAt = new Date(Date.now() + OTP_CODE_TTL_MINUTES * 60 * 1000).toISOString();
     const challengeId = buildPaymentChallengeToken({
       linkId,
       payerEmail,
       codeHash: hashOtpCode(code),
-      expiresAt
+      expiresAt,
+      linkToken: paymentLink.linkToken
     });
 
     await sendVerificationCodeEmail({
@@ -1352,6 +1378,7 @@ app.post("/payment-links/:linkId/send-code", async (req, res) => {
 
     res.json({
       challengeId,
+      linkToken: paymentLink.linkToken,
       payerEmail,
       message: `We sent a verification code to ${payerEmail}.`
     });
@@ -1366,17 +1393,8 @@ app.post("/payment-links/:linkId/confirm-payment", async (req, res) => {
   const payerEmail = normalizeEmail(req.body.payerEmail);
   const verificationCode = String(req.body.verificationCode || "").trim();
   const challengeId = String(req.body.challengeId || "").trim();
-  const linkToken = String(req.body.linkToken || "").trim();
+  const incomingLinkToken = String(req.body.linkToken || "").trim();
   const store = readStore();
-  const paymentLink = resolvePaymentLink(store, { linkId, linkToken });
-
-  if (!paymentLink) {
-    return res.status(404).json({ error: "Payment link not found" });
-  }
-
-  if (paymentLink.status !== "active") {
-    return res.status(400).json({ error: "This payment link is not active" });
-  }
 
   if (!payerEmail || !verificationCode || !challengeId) {
     return res.status(400).json({ error: "Email, verification code, and challenge ID are required" });
@@ -1386,6 +1404,17 @@ app.post("/payment-links/:linkId/confirm-payment", async (req, res) => {
 
   if (!challenge) {
     return res.status(400).json({ error: "Verification session expired. Please request a new code." });
+  }
+
+  const linkToken = incomingLinkToken || challenge.linkToken || "";
+  const paymentLink = resolvePaymentLink(store, { linkId, linkToken });
+
+  if (!paymentLink) {
+    return res.status(404).json({ error: "Payment link not found" });
+  }
+
+  if (paymentLink.status !== "active") {
+    return res.status(400).json({ error: "This payment link is not active" });
   }
 
   if (challenge.linkId !== linkId) {
