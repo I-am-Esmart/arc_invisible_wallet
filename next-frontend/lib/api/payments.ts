@@ -18,10 +18,19 @@ export async function listPayments(ownerEmail?: string) {
   return backendFetch<Payment[]>(`/payments${params.toString() ? `?${params.toString()}` : ""}`);
 }
 
-export async function startPaymentForLink(linkId: string, payerEmail: string, linkToken?: string) {
+export async function startPaymentForLink(
+  linkId: string,
+  payload: {
+    payerEmail: string;
+    linkToken?: string;
+    username?: string;
+    amount?: string;
+    currency?: string;
+  },
+) {
   return backendFetch<PaymentChallenge>(`/payment-links/${encodeURIComponent(linkId)}/send-code`, {
     method: "POST",
-    body: JSON.stringify({ payerEmail, linkToken }),
+    body: JSON.stringify(payload),
   });
 }
 
@@ -32,6 +41,9 @@ export async function confirmPaymentForLink(
     verificationCode: string;
     challengeId: string;
     linkToken?: string;
+    username?: string;
+    amount?: string;
+    currency?: string;
   },
 ) {
   return backendFetch<Payment>(`/payment-links/${encodeURIComponent(linkId)}/confirm-payment`, {

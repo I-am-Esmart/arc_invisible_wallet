@@ -13,10 +13,16 @@ export function PayButton({
   action,
   username,
   linkToken,
+  linkUsername,
+  linkAmount,
+  linkCurrency,
 }: {
   action: (state: PayActionState, formData: FormData) => Promise<PayActionState>;
   username: string;
   linkToken?: string;
+  linkUsername?: string;
+  linkAmount?: string;
+  linkCurrency?: string;
 }) {
   const [state, formAction, isPending] = useActionState(action, initialState);
   const [payerEmail, setPayerEmail] = useState("");
@@ -39,6 +45,9 @@ export function PayButton({
       <form action={formAction} className="space-y-4">
         <input type="hidden" name="challengeId" value={state.challengeId || ""} />
         <input type="hidden" name="linkToken" value={state.linkToken || linkToken || ""} />
+        <input type="hidden" name="username" value={linkUsername || ""} />
+        <input type="hidden" name="amount" value={linkAmount || ""} />
+        <input type="hidden" name="currency" value={linkCurrency || "USDC"} />
 
         <label className="block space-y-2">
           <span className="text-sm font-medium text-slate-700">Your email</span>

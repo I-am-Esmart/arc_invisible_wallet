@@ -206,22 +206,72 @@ function buildPaymentLinkToken(paymentLink) {
   return `${payload}.${signValue(payload)}`;
 }
 
-function generateShortPaymentLinkCode(store) {
-  const existingCodes = new Set(
-    (store.paymentLinks || [])
-      .map((link) => String(link?.linkCode || "").trim())
-      .filter(Boolean)
-  );
+function generateShortPaymentLinkCode({ username, amount, currency }) {
+  const timestampHex = Math.floor(Date.now() / 1000).toString(16).padStart(8, "0").slice(-8);
+  const nonceHex = crypto.randomBytes(3).toString("hex");
+  const signatureHex = crypto
+    .createHmac("sha256", PAYMENT_LINK_SIGNING_SECRET)
+    .update(`${slugifySegment(username)}|${normalizeAmount(amount)}|${normalizeToken(currency)}|${timestampHex}|${nonceHex}`)
+    .digest("hex")
+    .slice(0, 6);
 
-  for (let attempt = 0; attempt < 8; attempt += 1) {
-    const candidate = crypto.randomBytes(10).toString("hex");
+  return `${timestampHex}${nonceHex}${signatureHex}`;
+}
 
-    if (!existingCodes.has(candidate)) {
-      return candidate;
-    }
+function getStoredUserByUsername(store, username) {
+  const normalizedUsername = slugifySegment(username);
+
+  if (!normalizedUsername) {
+    return null;
   }
 
-  return crypto.randomUUID().replace(/-/g, "").slice(0, 20);
+  return Object.values(store.users).find((user) => user.username === normalizedUsername) || null;
+}
+
+function readCompactPaymentLinkFromRoute(store, { linkId, username, amount, currency }) {
+  const normalizedLinkId = String(linkId || "").trim().toLowerCase();
+  const normalizedUsername = slugifySegment(username);
+  const normalizedAmount = normalizeAmount(amount);
+  const normalizedCurrency = normalizeToken(currency || DEFAULT_LINK_CURRENCY);
+
+  if (!/^[a-f0-9]{20}$/.test(normalizedLinkId) || !normalizedUsername || !normalizedAmount) {
+    return null;
+  }
+
+  const timestampHex = normalizedLinkId.slice(0, 8);
+  const nonceHex = normalizedLinkId.slice(8, 14);
+  const signatureHex = normalizedLinkId.slice(14);
+  const expectedSignature = crypto
+    .createHmac("sha256", PAYMENT_LINK_SIGNING_SECRET)
+    .update(`${normalizedUsername}|${normalizedAmount}|${normalizedCurrency}|${timestampHex}|${nonceHex}`)
+    .digest("hex")
+    .slice(0, 6);
+
+  if (signatureHex !== expectedSignature) {
+    return null;
+  }
+
+  const user = getStoredUserByUsername(store, normalizedUsername);
+
+  if (!user) {
+    return null;
+  }
+
+  const createdAt = new Date(parseInt(timestampHex, 16) * 1000).toISOString();
+
+  return {
+    id: normalizedLinkId,
+    linkCode: normalizedLinkId,
+    ownerEmail: normalizeEmail(user.email),
+    ownerName: user.displayName || displayNameFromEmail(user.email),
+    username: normalizedUsername,
+    recipientAddress: user.address || walletFromEmail(user.email).signer.address,
+    amount: normalizedAmount,
+    description: "",
+    currency: normalizedCurrency,
+    status: "active",
+    createdAt
+  };
 }
 
 function readPaymentLinkFromToken(linkToken) {
@@ -417,13 +467,7 @@ function buildPaymentLinkPath(paymentLink) {
 }
 
 function buildPaymentLinkUrl(paymentLink) {
-  const baseUrl = `${DEFAULT_LINK_BASE_URL}${buildPaymentLinkPath(paymentLink)}`;
-
-  if (paymentLink.linkToken) {
-    return `${baseUrl}?k=${encodeURIComponent(paymentLink.linkToken)}`;
-  }
-
-  return baseUrl;
+  return `${DEFAULT_LINK_BASE_URL}${buildPaymentLinkPath(paymentLink)}`;
 }
 
 function hydratePaymentLinkAccess(paymentLink) {
@@ -533,6 +577,19 @@ function resolvePaymentLink(store, { linkId, username, amount, linkToken }) {
   const normalizedUsername = username ? slugifySegment(username) : "";
   const normalizedAmount = amount ? String(amount).trim() : "";
   const normalizedLinkToken = String(linkToken || "").trim();
+  const fromCompactRoute = normalizedLinkId && normalizedUsername && normalizedAmount
+    ? readCompactPaymentLinkFromRoute(store, {
+      linkId: normalizedLinkId,
+      username: normalizedUsername,
+      amount: normalizedAmount,
+      currency: DEFAULT_LINK_CURRENCY
+    })
+    : null;
+
+  if (fromCompactRoute) {
+    fromCompactRoute.url = buildPaymentLinkUrl(fromCompactRoute);
+    return fromCompactRoute;
+  }
 
   const fromToken = normalizedLinkToken ? readPaymentLinkFromToken(normalizedLinkToken) : null;
 
@@ -1279,7 +1336,11 @@ app.post("/payment-links", async (req, res) => {
       createdAt: new Date().toISOString()
     };
 
-    paymentLink.linkCode = generateShortPaymentLinkCode(store);
+    paymentLink.linkCode = generateShortPaymentLinkCode({
+      username: paymentLink.username,
+      amount: paymentLink.amount,
+      currency: paymentLink.currency
+    });
     paymentLink.linkToken = buildPaymentLinkToken(paymentLink);
     paymentLink.url = buildPaymentLinkUrl(paymentLink);
     store.paymentLinks.push(paymentLink);
@@ -1343,9 +1404,12 @@ app.post("/payment-links/:linkId/send-code", async (req, res) => {
     const { linkId } = req.params;
     const payerEmail = normalizeEmail(req.body.payerEmail);
     const linkToken = String(req.body.linkToken || "").trim();
+    const username = String(req.body.username || "").trim();
+    const amount = String(req.body.amount || "").trim();
+    const currency = String(req.body.currency || "").trim();
     const store = readStore();
 
-    const paymentLink = resolvePaymentLink(store, { linkId, linkToken });
+    const paymentLink = resolvePaymentLink(store, { linkId, linkToken, username, amount, currency });
 
     if (!paymentLink) {
       return res.status(404).json({ error: "Payment link not found" });
@@ -1394,6 +1458,9 @@ app.post("/payment-links/:linkId/confirm-payment", async (req, res) => {
   const verificationCode = String(req.body.verificationCode || "").trim();
   const challengeId = String(req.body.challengeId || "").trim();
   const incomingLinkToken = String(req.body.linkToken || "").trim();
+  const username = String(req.body.username || "").trim();
+  const amount = String(req.body.amount || "").trim();
+  const currency = String(req.body.currency || "").trim();
   const store = readStore();
 
   if (!payerEmail || !verificationCode || !challengeId) {
@@ -1407,7 +1474,7 @@ app.post("/payment-links/:linkId/confirm-payment", async (req, res) => {
   }
 
   const linkToken = incomingLinkToken || challenge.linkToken || "";
-  const paymentLink = resolvePaymentLink(store, { linkId, linkToken });
+  const paymentLink = resolvePaymentLink(store, { linkId, linkToken, username, amount, currency });
 
   if (!paymentLink) {
     return res.status(404).json({ error: "Payment link not found" });
