@@ -18,6 +18,7 @@ export async function createPaymentLinkAction(
   const description = String(formData.get("description") || "").trim();
   const ownerEmail = String(formData.get("ownerEmail") || "").trim();
   const ownerName = String(formData.get("ownerName") || "").trim();
+  const currency = String(formData.get("currency") || "USDC").trim().toUpperCase();
 
   if (!amount) {
     return {
@@ -46,6 +47,7 @@ export async function createPaymentLinkAction(
       description: description || undefined,
       ownerEmail,
       ownerName: ownerName || undefined,
+      currency,
     });
 
     return {

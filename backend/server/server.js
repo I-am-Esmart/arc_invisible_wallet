@@ -47,6 +47,13 @@ const MAX_HISTORY_ITEMS = Math.max(10, Number(process.env.MAX_HISTORY_ITEMS || 2
 const TX_RECEIPT_POLL_INTERVAL_MS = Math.max(2000, Number(process.env.TX_RECEIPT_POLL_INTERVAL_MS || 4000));
 const TX_RECEIPT_TIMEOUT_MS = Math.max(15000, Number(process.env.TX_RECEIPT_TIMEOUT_MS || 120000));
 const RESEND_API_URL = "https://api.resend.com/emails";
+const PERSISTENT_KV_URL = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL || "";
+const PERSISTENT_KV_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN || "";
+const HAS_PERSISTENT_KV = Boolean(PERSISTENT_KV_URL && PERSISTENT_KV_TOKEN);
+const LINK_CURRENCY_CODES = {
+  USDC: "1",
+  EURC: "2"
+};
 
 function normalizeOrigin(origin) {
   return origin.replace(/\/$/, "");
@@ -62,6 +69,167 @@ function normalizeToken(token) {
 
 function normalizeAmount(amount) {
   return Number(amount).toString();
+}
+
+function currencyCodeForToken(token) {
+  return LINK_CURRENCY_CODES[normalizeToken(token)] || LINK_CURRENCY_CODES[DEFAULT_LINK_CURRENCY] || "1";
+}
+
+function tokenFromCurrencyCode(code) {
+  return Object.entries(LINK_CURRENCY_CODES).find(([, value]) => value === code)?.[0] || null;
+}
+
+function persistentUserEmailKey(email) {
+  return `veloxpay:user:email:${normalizeEmail(email)}`;
+}
+
+function persistentUserUsernameKey(username) {
+  return `veloxpay:user:username:${slugifySegment(username)}`;
+}
+
+function persistentPaymentLinkKey(linkCode) {
+  return `veloxpay:payment-link:${String(linkCode || "").trim().toLowerCase()}`;
+}
+
+function persistentOwnerPaymentLinksKey(email) {
+  return `veloxpay:payment-links:owner:${normalizeEmail(email)}`;
+}
+
+function persistentOwnerPaymentsKey(email) {
+  return `veloxpay:payments:owner:${normalizeEmail(email)}`;
+}
+
+async function runPersistentCommand(command, ...args) {
+  if (!HAS_PERSISTENT_KV) {
+    return null;
+  }
+
+  const response = await fetch(PERSISTENT_KV_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${PERSISTENT_KV_TOKEN}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify([command, ...args.map((value) => String(value))])
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Persistent storage error: ${errorText || response.statusText}`);
+  }
+
+  const payload = await response.json();
+
+  if (payload?.error) {
+    throw new Error(`Persistent storage error: ${payload.error}`);
+  }
+
+  return payload?.result ?? null;
+}
+
+async function getPersistentJson(key) {
+  const serialized = await runPersistentCommand("GET", key);
+  return serialized ? JSON.parse(serialized) : null;
+}
+
+async function setPersistentJson(key, value) {
+  await runPersistentCommand("SET", key, JSON.stringify(value));
+}
+
+async function getPersistentUserByEmail(email) {
+  if (!HAS_PERSISTENT_KV) {
+    return null;
+  }
+
+  return getPersistentJson(persistentUserEmailKey(email));
+}
+
+async function getPersistentUserByUsername(username) {
+  if (!HAS_PERSISTENT_KV) {
+    return null;
+  }
+
+  const email = await runPersistentCommand("GET", persistentUserUsernameKey(username));
+
+  if (!email) {
+    return null;
+  }
+
+  return getPersistentUserByEmail(String(email));
+}
+
+async function savePersistentUser(user) {
+  if (!HAS_PERSISTENT_KV || !user?.email) {
+    return;
+  }
+
+  await setPersistentJson(persistentUserEmailKey(user.email), user);
+
+  if (user.username) {
+    await runPersistentCommand("SET", persistentUserUsernameKey(user.username), user.email);
+  }
+}
+
+async function isPersistentUsernameTakenByAnotherUser(username, currentEmail) {
+  if (!HAS_PERSISTENT_KV || !username) {
+    return false;
+  }
+
+  const existingEmail = await runPersistentCommand("GET", persistentUserUsernameKey(username));
+
+  return Boolean(existingEmail && normalizeEmail(existingEmail) !== normalizeEmail(currentEmail));
+}
+
+async function getPersistentPaymentLink(linkCode) {
+  if (!HAS_PERSISTENT_KV || !linkCode) {
+    return null;
+  }
+
+  return getPersistentJson(persistentPaymentLinkKey(linkCode));
+}
+
+async function savePersistentPaymentLink(paymentLink) {
+  if (!HAS_PERSISTENT_KV || !paymentLink?.linkCode || !paymentLink?.ownerEmail) {
+    return;
+  }
+
+  await setPersistentJson(persistentPaymentLinkKey(paymentLink.linkCode), paymentLink);
+
+  const listKey = persistentOwnerPaymentLinksKey(paymentLink.ownerEmail);
+  const existing = await getPersistentJson(listKey);
+  const nextLinks = Array.isArray(existing) ? existing : [];
+  const deduped = [paymentLink, ...nextLinks.filter((link) => link?.linkCode !== paymentLink.linkCode)].slice(0, 100);
+  await setPersistentJson(listKey, deduped);
+}
+
+async function listPersistentPaymentLinks(ownerEmail) {
+  if (!HAS_PERSISTENT_KV || !ownerEmail) {
+    return [];
+  }
+
+  const stored = await getPersistentJson(persistentOwnerPaymentLinksKey(ownerEmail));
+  return Array.isArray(stored) ? stored : [];
+}
+
+async function savePersistentPayment(payment) {
+  if (!HAS_PERSISTENT_KV || !payment?.ownerEmail || !payment?.id) {
+    return;
+  }
+
+  const listKey = persistentOwnerPaymentsKey(payment.ownerEmail);
+  const existing = await getPersistentJson(listKey);
+  const nextPayments = Array.isArray(existing) ? existing : [];
+  const deduped = [payment, ...nextPayments.filter((entry) => entry?.id !== payment.id)].slice(0, 100);
+  await setPersistentJson(listKey, deduped);
+}
+
+async function listPersistentPayments(ownerEmail) {
+  if (!HAS_PERSISTENT_KV || !ownerEmail) {
+    return [];
+  }
+
+  const stored = await getPersistentJson(persistentOwnerPaymentsKey(ownerEmail));
+  return Array.isArray(stored) ? stored : [];
 }
 
 function getTokenConfig(token) {
@@ -207,43 +375,63 @@ function buildPaymentLinkToken(paymentLink) {
 }
 
 function generateShortPaymentLinkCode({ username, amount, currency }) {
+  const currencyCode = currencyCodeForToken(currency);
   const timestampHex = Math.floor(Date.now() / 1000).toString(16).padStart(8, "0").slice(-8);
-  const nonceHex = crypto.randomBytes(3).toString("hex");
+  const nonceHex = crypto.randomBytes(3).toString("hex").slice(0, 5);
   const signatureHex = crypto
     .createHmac("sha256", PAYMENT_LINK_SIGNING_SECRET)
     .update(`${slugifySegment(username)}|${normalizeAmount(amount)}|${normalizeToken(currency)}|${timestampHex}|${nonceHex}`)
     .digest("hex")
     .slice(0, 6);
 
-  return `${timestampHex}${nonceHex}${signatureHex}`;
+  return `${currencyCode}${timestampHex}${nonceHex}${signatureHex}`;
 }
 
-function getStoredUserByUsername(store, username) {
+async function getStoredUserByUsername(store, username) {
   const normalizedUsername = slugifySegment(username);
 
   if (!normalizedUsername) {
     return null;
   }
 
-  return Object.values(store.users).find((user) => user.username === normalizedUsername) || null;
+  const localUser = Object.values(store.users).find((user) => user.username === normalizedUsername) || null;
+
+  if (localUser) {
+    return localUser;
+  }
+
+  const persistentUser = await getPersistentUserByUsername(normalizedUsername);
+
+  if (persistentUser?.email) {
+    store.users[normalizeEmail(persistentUser.email)] = persistentUser;
+  }
+
+  return persistentUser || null;
 }
 
-function readCompactPaymentLinkFromRoute(store, { linkId, username, amount, currency }) {
+async function readCompactPaymentLinkFromRoute(store, { linkId, username, amount, currency }) {
   const normalizedLinkId = String(linkId || "").trim().toLowerCase();
   const normalizedUsername = slugifySegment(username);
   const normalizedAmount = normalizeAmount(amount);
-  const normalizedCurrency = normalizeToken(currency || DEFAULT_LINK_CURRENCY);
+  const currencyCode = normalizedLinkId.slice(0, 1);
+  const derivedCurrency = tokenFromCurrencyCode(currencyCode);
 
-  if (!/^[a-f0-9]{20}$/.test(normalizedLinkId) || !normalizedUsername || !normalizedAmount) {
+  if (!/^[a-f0-9]{20}$/.test(normalizedLinkId) || !normalizedUsername || !normalizedAmount || !derivedCurrency) {
     return null;
   }
 
-  const timestampHex = normalizedLinkId.slice(0, 8);
-  const nonceHex = normalizedLinkId.slice(8, 14);
+  const normalizedCurrency = normalizeToken(currency || derivedCurrency);
+
+  if (normalizedCurrency !== derivedCurrency) {
+    return null;
+  }
+
+  const timestampHex = normalizedLinkId.slice(1, 9);
+  const nonceHex = normalizedLinkId.slice(9, 14);
   const signatureHex = normalizedLinkId.slice(14);
   const expectedSignature = crypto
     .createHmac("sha256", PAYMENT_LINK_SIGNING_SECRET)
-    .update(`${normalizedUsername}|${normalizedAmount}|${normalizedCurrency}|${timestampHex}|${nonceHex}`)
+    .update(`${normalizedUsername}|${normalizedAmount}|${derivedCurrency}|${timestampHex}|${nonceHex}`)
     .digest("hex")
     .slice(0, 6);
 
@@ -251,7 +439,7 @@ function readCompactPaymentLinkFromRoute(store, { linkId, username, amount, curr
     return null;
   }
 
-  const user = getStoredUserByUsername(store, normalizedUsername);
+  const user = await getStoredUserByUsername(store, normalizedUsername);
 
   if (!user) {
     return null;
@@ -268,7 +456,7 @@ function readCompactPaymentLinkFromRoute(store, { linkId, username, amount, curr
     recipientAddress: user.address || walletFromEmail(user.email).signer.address,
     amount: normalizedAmount,
     description: "",
-    currency: normalizedCurrency,
+    currency: derivedCurrency,
     status: "active",
     createdAt
   };
@@ -398,6 +586,42 @@ function readPaymentChallengeToken(token) {
   }
 }
 
+function buildWalletLoginChallengeToken({ email, displayName, codeHash, expiresAt }) {
+  const payload = encodeBase64Url(JSON.stringify({
+    email: normalizeEmail(email),
+    displayName: String(displayName || "").trim(),
+    codeHash,
+    expiresAt
+  }));
+
+  return `${payload}.${signValue(payload)}`;
+}
+
+function readWalletLoginChallengeToken(token) {
+  const [payload, signature] = String(token || "").split(".");
+
+  if (!payload || !signature || signValue(payload) !== signature) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(decodeBase64Url(payload));
+
+    if (!parsed?.email || !parsed?.codeHash || !parsed?.expiresAt) {
+      return null;
+    }
+
+    return {
+      email: normalizeEmail(parsed.email),
+      displayName: String(parsed.displayName || "").trim(),
+      codeHash: String(parsed.codeHash),
+      expiresAt: String(parsed.expiresAt)
+    };
+  } catch {
+    return null;
+  }
+}
+
 function createEmptyStore() {
   return {
     users: {},
@@ -506,7 +730,7 @@ function buildWalletCreateUrl(email, paymentLink) {
   return `${WALLET_APP_BASE_URL}/login?${params.toString()}`;
 }
 
-function buildUniqueUsername(store, baseUsername, currentEmail) {
+async function buildUniqueUsername(store, baseUsername, currentEmail) {
   const fallbackUsername = slugifySegment(baseUsername) || slugifySegment(DEFAULT_OWNER_USERNAME) || "member";
   const taken = new Set(
     Object.values(store.users)
@@ -515,32 +739,35 @@ function buildUniqueUsername(store, baseUsername, currentEmail) {
       .filter(Boolean)
   );
 
-  if (!taken.has(fallbackUsername)) {
+  if (!taken.has(fallbackUsername) && !(await isPersistentUsernameTakenByAnotherUser(fallbackUsername, currentEmail))) {
     return fallbackUsername;
   }
 
   let suffix = 2;
-  while (taken.has(`${fallbackUsername}-${suffix}`)) {
+  while (
+    taken.has(`${fallbackUsername}-${suffix}`)
+    || await isPersistentUsernameTakenByAnotherUser(`${fallbackUsername}-${suffix}`, currentEmail)
+  ) {
     suffix += 1;
   }
 
   return `${fallbackUsername}-${suffix}`;
 }
 
-function ensureUserRecord(store, { email, displayName }) {
+async function ensureUserRecord(store, { email, displayName }) {
   const normalizedEmail = normalizeEmail(email);
 
   if (!normalizedEmail) {
     throw new Error("Email required");
   }
 
-  const existingUser = store.users[normalizedEmail];
+  const existingUser = store.users[normalizedEmail] || await getPersistentUserByEmail(normalizedEmail);
   const nextDisplayName = String(displayName || existingUser?.displayName || displayNameFromEmail(normalizedEmail)).trim();
   const baseUsername = slugifySegment(nextDisplayName) || slugifySegment(normalizedEmail.split("@")[0]) || "member";
 
   if (existingUser) {
     if (!existingUser.username) {
-      existingUser.username = buildUniqueUsername(store, baseUsername, normalizedEmail);
+      existingUser.username = await buildUniqueUsername(store, baseUsername, normalizedEmail);
     }
 
     if (displayName) {
@@ -550,6 +777,8 @@ function ensureUserRecord(store, { email, displayName }) {
     }
 
     existingUser.updatedAt = new Date().toISOString();
+    store.users[normalizedEmail] = existingUser;
+    await savePersistentUser(existingUser);
     return existingUser;
   }
 
@@ -559,30 +788,44 @@ function ensureUserRecord(store, { email, displayName }) {
     address: signer.address,
     arcKeyId,
     displayName: nextDisplayName,
-    username: buildUniqueUsername(store, baseUsername, normalizedEmail),
+    username: await buildUniqueUsername(store, baseUsername, normalizedEmail),
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
   };
 
   store.users[normalizedEmail] = user;
+  await savePersistentUser(user);
   return user;
 }
 
-function getStoredUser(store, email) {
-  return store.users[normalizeEmail(email)] || null;
+async function getStoredUser(store, email) {
+  const normalizedEmail = normalizeEmail(email);
+
+  if (store.users[normalizedEmail]) {
+    return store.users[normalizedEmail];
+  }
+
+  const persistentUser = await getPersistentUserByEmail(normalizedEmail);
+
+  if (persistentUser?.email) {
+    store.users[normalizedEmail] = persistentUser;
+  }
+
+  return persistentUser || null;
 }
 
-function resolvePaymentLink(store, { linkId, username, amount, linkToken }) {
+async function resolvePaymentLink(store, { linkId, username, amount, linkToken, currency }) {
   const normalizedLinkId = String(linkId || "").trim();
   const normalizedUsername = username ? slugifySegment(username) : "";
   const normalizedAmount = amount ? String(amount).trim() : "";
   const normalizedLinkToken = String(linkToken || "").trim();
+  const normalizedCurrency = currency ? normalizeToken(currency) : "";
   const fromCompactRoute = normalizedLinkId && normalizedUsername && normalizedAmount
-    ? readCompactPaymentLinkFromRoute(store, {
+    ? await readCompactPaymentLinkFromRoute(store, {
       linkId: normalizedLinkId,
       username: normalizedUsername,
       amount: normalizedAmount,
-      currency: DEFAULT_LINK_CURRENCY
+      currency: normalizedCurrency || undefined
     })
     : null;
 
@@ -597,6 +840,7 @@ function resolvePaymentLink(store, { linkId, username, amount, linkToken }) {
     if (
       (!normalizedUsername || fromToken.username === normalizedUsername) &&
       (!normalizedAmount || fromToken.amount === normalizedAmount) &&
+      (!normalizedCurrency || fromToken.currency === normalizedCurrency) &&
       (!normalizedLinkId || fromToken.linkCode === normalizedLinkId || fromToken.id === normalizedLinkId)
     ) {
       fromToken.url = buildPaymentLinkUrl(fromToken);
@@ -609,11 +853,26 @@ function resolvePaymentLink(store, { linkId, username, amount, linkToken }) {
   if (fromCode) {
     if (
       (!normalizedUsername || fromCode.username === normalizedUsername) &&
-      (!normalizedAmount || fromCode.amount === normalizedAmount)
+      (!normalizedAmount || fromCode.amount === normalizedAmount) &&
+      (!normalizedCurrency || fromCode.currency === normalizedCurrency)
     ) {
       hydratePaymentLinkAccess(fromCode);
       fromCode.url = buildPaymentLinkUrl(fromCode);
       return fromCode;
+    }
+  }
+
+  const persistentLink = normalizedLinkId ? await getPersistentPaymentLink(normalizedLinkId) : null;
+
+  if (persistentLink) {
+    if (
+      (!normalizedUsername || persistentLink.username === normalizedUsername) &&
+      (!normalizedAmount || persistentLink.amount === normalizedAmount) &&
+      (!normalizedCurrency || persistentLink.currency === normalizedCurrency)
+    ) {
+      hydratePaymentLinkAccess(persistentLink);
+      persistentLink.url = buildPaymentLinkUrl(persistentLink);
+      return persistentLink;
     }
   }
 
@@ -822,26 +1081,7 @@ async function waitForTransactionReceiptWithBackoff(hash) {
   throw new Error("Transaction was sent but confirmation is taking too long. Please check Arc Explorer in a moment.");
 }
 
-async function sendVerificationCodeEmail({ to, code, paymentLink }) {
-  const subject = `${code} is your VeloxPay verification code`;
-  const html = `
-    <div style="font-family: Arial, sans-serif; max-width: 520px; margin: 0 auto; color: #0f172a;">
-      <p style="font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; color: #2563eb;">VeloxPay</p>
-      <h1 style="font-size: 24px; margin-bottom: 12px;">Confirm your payment</h1>
-      <p style="font-size: 15px; line-height: 1.6; color: #475569;">
-        Use this verification code to approve your payment of
-        <strong>${escapeHtml(paymentLink.amount)} ${escapeHtml(paymentLink.currency)}</strong>
-        to <strong>${escapeHtml(paymentLink.ownerName || paymentLink.username)}</strong>.
-      </p>
-      <div style="margin: 24px 0; padding: 18px 22px; border-radius: 16px; background: #eff6ff; font-size: 30px; font-weight: 700; letter-spacing: 0.28em; color: #1d4ed8; text-align: center;">
-        ${escapeHtml(code)}
-      </div>
-      <p style="font-size: 14px; line-height: 1.6; color: #64748b;">
-        This code expires in ${OTP_CODE_TTL_MINUTES} minutes. If you did not request this payment, you can ignore this email.
-      </p>
-    </div>
-  `;
-
+async function sendEmailMessage({ to, subject, html }) {
   const smtpUser = normalizeEmail(process.env.SMTP_USER);
   const smtpPass = process.env.SMTP_PASS || process.env.GMAIL_APP_PASSWORD;
   const smtpHost = process.env.SMTP_HOST || "smtp.gmail.com";
@@ -912,6 +1152,51 @@ async function sendVerificationCodeEmail({ to, code, paymentLink }) {
   }
 }
 
+async function sendVerificationCodeEmail({ to, code, paymentLink }) {
+  const subject = `${code} is your VeloxPay verification code`;
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 520px; margin: 0 auto; color: #0f172a;">
+      <p style="font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; color: #2563eb;">VeloxPay</p>
+      <h1 style="font-size: 24px; margin-bottom: 12px;">Confirm your payment</h1>
+      <p style="font-size: 15px; line-height: 1.6; color: #475569;">
+        Use this verification code to approve your payment of
+        <strong>${escapeHtml(paymentLink.amount)} ${escapeHtml(paymentLink.currency)}</strong>
+        to <strong>${escapeHtml(paymentLink.ownerName || paymentLink.username)}</strong>.
+      </p>
+      <div style="margin: 24px 0; padding: 18px 22px; border-radius: 16px; background: #eff6ff; font-size: 30px; font-weight: 700; letter-spacing: 0.28em; color: #1d4ed8; text-align: center;">
+        ${escapeHtml(code)}
+      </div>
+      <p style="font-size: 14px; line-height: 1.6; color: #64748b;">
+        This code expires in ${OTP_CODE_TTL_MINUTES} minutes. If you did not request this payment, you can ignore this email.
+      </p>
+    </div>
+  `;
+
+  await sendEmailMessage({ to, subject, html });
+}
+
+async function sendWalletLoginCodeEmail({ to, code, displayName }) {
+  const subject = `${code} is your VeloxPay login code`;
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 520px; margin: 0 auto; color: #0f172a;">
+      <p style="font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; color: #2563eb;">VeloxPay</p>
+      <h1 style="font-size: 24px; margin-bottom: 12px;">Confirm your wallet access</h1>
+      <p style="font-size: 15px; line-height: 1.6; color: #475569;">
+        Use this code to ${displayName ? "continue as " : "finish signing in to "}
+        <strong>${escapeHtml(displayName || normalizeEmail(to))}</strong>.
+      </p>
+      <div style="margin: 24px 0; padding: 18px 22px; border-radius: 16px; background: #eff6ff; font-size: 30px; font-weight: 700; letter-spacing: 0.28em; color: #1d4ed8; text-align: center;">
+        ${escapeHtml(code)}
+      </div>
+      <p style="font-size: 14px; line-height: 1.6; color: #64748b;">
+        This code expires in ${OTP_CODE_TTL_MINUTES} minutes. If this was not you, you can ignore this email.
+      </p>
+    </div>
+  `;
+
+  await sendEmailMessage({ to, subject, html });
+}
+
 const allowedOrigins = (process.env.FRONTEND_ORIGIN || "http://localhost:5173,http://localhost:3000")
   .split(",")
   .map((origin) => normalizeOrigin(origin.trim()))
@@ -969,7 +1254,7 @@ function mapStoredUser(user) {
   };
 }
 
-function resolveOwnerIdentity(store, { email, displayName } = {}) {
+async function resolveOwnerIdentity(store, { email, displayName } = {}) {
   const ownerEmail = normalizeEmail(email) || normalizeEmail(DEFAULT_OWNER_EMAIL);
   const ownerDisplayName = String(displayName || "").trim();
 
@@ -1114,13 +1399,71 @@ app.get("/health", (req, res) => {
   res.json({ status: "ok", message: "Arc Wallet Backend is running" });
 });
 
-app.post("/auth/login", async (req, res) => {
+app.post("/auth/send-code", async (req, res) => {
   try {
     const { email, displayName } = req.body;
     if (!email) return res.status(400).json({ error: "Email required" });
 
+    const normalizedEmail = normalizeEmail(email);
+    const code = generateOtpCode();
+    const expiresAt = new Date(Date.now() + OTP_CODE_TTL_MINUTES * 60 * 1000).toISOString();
+    const challengeId = buildWalletLoginChallengeToken({
+      email: normalizedEmail,
+      displayName,
+      codeHash: hashOtpCode(code),
+      expiresAt
+    });
+
+    await sendWalletLoginCodeEmail({
+      to: normalizedEmail,
+      code,
+      displayName: String(displayName || "").trim()
+    });
+
+    res.json({
+      challengeId,
+      email: normalizedEmail,
+      message: `We sent a verification code to ${normalizedEmail}.`
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/auth/verify-code", async (req, res) => {
+  try {
+    const { email, displayName, verificationCode, challengeId } = req.body;
+
+    if (!email || !verificationCode || !challengeId) {
+      return res.status(400).json({ error: "Email, verification code, and challenge ID are required" });
+    }
+
+    const challenge = readWalletLoginChallengeToken(challengeId);
+
+    if (!challenge) {
+      return res.status(400).json({ error: "Verification session expired. Please request a new code." });
+    }
+
+    const normalizedEmail = normalizeEmail(email);
+
+    if (challenge.email !== normalizedEmail) {
+      return res.status(400).json({ error: "Verification email does not match the active session." });
+    }
+
+    if (new Date(challenge.expiresAt).getTime() <= Date.now()) {
+      return res.status(400).json({ error: "Verification code expired. Please request a new code." });
+    }
+
+    if (challenge.codeHash !== hashOtpCode(verificationCode)) {
+      return res.status(400).json({ error: "Incorrect verification code." });
+    }
+
     const store = readStore();
-    const user = ensureUserRecord(store, { email, displayName });
+    const user = await ensureUserRecord(store, {
+      email: normalizedEmail,
+      displayName: String(displayName || challenge.displayName || "").trim()
+    });
     const balances = await fetchAllTokenBalances(user.address);
     writeStore(store);
 
@@ -1135,7 +1478,11 @@ app.post("/auth/login", async (req, res) => {
   }
 });
 
-app.get("/users/profile", (req, res) => {
+app.post("/auth/login", async (req, res) => {
+  res.status(400).json({ error: "Use email verification first. Start with /auth/send-code." });
+});
+
+app.get("/users/profile", async (req, res) => {
   try {
     const email = normalizeEmail(req.query.email);
 
@@ -1144,7 +1491,7 @@ app.get("/users/profile", (req, res) => {
     }
 
     const store = readStore();
-    const user = getStoredUser(store, email);
+    const user = await getStoredUser(store, email);
 
     if (!user) {
       return res.status(404).json({ error: "User not found" });
@@ -1157,7 +1504,7 @@ app.get("/users/profile", (req, res) => {
   }
 });
 
-app.post("/users/profile", (req, res) => {
+app.post("/users/profile", async (req, res) => {
   try {
     const { email, displayName } = req.body;
 
@@ -1166,7 +1513,7 @@ app.post("/users/profile", (req, res) => {
     }
 
     const store = readStore();
-    const user = ensureUserRecord(store, { email, displayName });
+    const user = await ensureUserRecord(store, { email, displayName });
     writeStore(store);
 
     res.json(mapStoredUser(user));
@@ -1255,11 +1602,16 @@ app.post("/send-transaction", async (req, res) => {
   }
 });
 
-app.get("/payment-links", (req, res) => {
+app.get("/payment-links", async (req, res) => {
   try {
     const ownerEmail = normalizeEmail(req.query.ownerEmail);
     const store = readStore();
-    const paymentLinks = [...store.paymentLinks]
+    const mergedLinks = mergeUniqueByKey(
+      ownerEmail ? await listPersistentPaymentLinks(ownerEmail) : [],
+      store.paymentLinks,
+      (link) => link.linkCode || link.id
+    );
+    const paymentLinks = [...mergedLinks]
       .filter((link) => !ownerEmail || link.ownerEmail === ownerEmail)
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       .map((link) => ({
@@ -1274,7 +1626,7 @@ app.get("/payment-links", (req, res) => {
   }
 });
 
-app.get("/payment-links/resolve", (req, res) => {
+app.get("/payment-links/resolve", async (req, res) => {
   try {
     const username = slugifySegment(req.query.username);
     const amount = String(req.query.amount || "").trim();
@@ -1286,7 +1638,7 @@ app.get("/payment-links/resolve", (req, res) => {
     }
 
     const store = readStore();
-    const paymentLink = resolvePaymentLink(store, { username, amount, linkId, linkToken });
+    const paymentLink = await resolvePaymentLink(store, { username, amount, linkId, linkToken });
 
     if (!paymentLink) {
       return res.status(404).json({ error: "Payment link not found" });
@@ -1320,7 +1672,7 @@ app.post("/payment-links", async (req, res) => {
     }
 
     const store = readStore();
-    const owner = resolveOwnerIdentity(store, { email: ownerEmail, displayName: ownerName });
+    const owner = await resolveOwnerIdentity(store, { email: ownerEmail, displayName: ownerName });
     const id = crypto.randomUUID();
     const normalizedAmount = normalizeAmount(amount);
     const paymentLink = {
@@ -1344,6 +1696,7 @@ app.post("/payment-links", async (req, res) => {
     paymentLink.linkToken = buildPaymentLinkToken(paymentLink);
     paymentLink.url = buildPaymentLinkUrl(paymentLink);
     store.paymentLinks.push(paymentLink);
+    await savePersistentPaymentLink(paymentLink);
     writeStore(store);
 
     res.status(201).json(paymentLink);
@@ -1357,7 +1710,11 @@ app.get("/payments", async (req, res) => {
   try {
     const ownerEmail = normalizeEmail(req.query.ownerEmail);
     const store = readStore();
-    const storedPayments = [...store.payments]
+    const storedPayments = mergeUniqueByKey(
+      ownerEmail ? await listPersistentPayments(ownerEmail) : [],
+      store.payments,
+      (payment) => payment.id
+    )
       .filter((payment) => !ownerEmail || payment.ownerEmail === ownerEmail)
       .sort((a, b) => new Date(b.paidAt || b.createdAt).getTime() - new Date(a.paidAt || a.createdAt).getTime())
       .map(mapStoredPayment);
@@ -1409,7 +1766,7 @@ app.post("/payment-links/:linkId/send-code", async (req, res) => {
     const currency = String(req.body.currency || "").trim();
     const store = readStore();
 
-    const paymentLink = resolvePaymentLink(store, { linkId, linkToken, username, amount, currency });
+    const paymentLink = await resolvePaymentLink(store, { linkId, linkToken, username, amount, currency });
 
     if (!paymentLink) {
       return res.status(404).json({ error: "Payment link not found" });
@@ -1474,7 +1831,7 @@ app.post("/payment-links/:linkId/confirm-payment", async (req, res) => {
   }
 
   const linkToken = incomingLinkToken || challenge.linkToken || "";
-  const paymentLink = resolvePaymentLink(store, { linkId, linkToken, username, amount, currency });
+  const paymentLink = await resolvePaymentLink(store, { linkId, linkToken, username, amount, currency });
 
   if (!paymentLink) {
     return res.status(404).json({ error: "Payment link not found" });
@@ -1527,6 +1884,7 @@ app.post("/payment-links/:linkId/confirm-payment", async (req, res) => {
     };
 
     store.payments.unshift(payment);
+    await savePersistentPayment(payment);
     store.txs.unshift({
       hash: transfer.hash,
       from: transfer.from,
@@ -1557,6 +1915,7 @@ app.post("/payment-links/:linkId/confirm-payment", async (req, res) => {
     };
 
     store.payments.unshift(failedPayment);
+    await savePersistentPayment(failedPayment);
     writeStore(store);
 
     console.error("Payment link confirm error:", err);

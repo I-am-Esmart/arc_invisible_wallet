@@ -29,6 +29,7 @@ export function CreateLinkForm({
   const [state, formAction, isPending] = useActionState(createPaymentLinkAction, initialState);
   const [ownerEmail, setOwnerEmail] = useState("");
   const [ownerName, setOwnerName] = useState("");
+  const [currency, setCurrency] = useState("USDC");
   const [copied, setCopied] = useState(false);
 
   function syncOwnerCookies(email: string, name: string) {
@@ -162,13 +163,24 @@ export function CreateLinkForm({
           label="Amount"
           hint="Required. This is the amount the payer will see right away."
         >
-          <input
-            name="amount"
-            type="text"
-            placeholder="500"
-            required
-            className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
-          />
+          <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_180px]">
+            <input
+              name="amount"
+              type="text"
+              placeholder="500"
+              required
+              className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+            />
+            <select
+              name="currency"
+              value={currency}
+              onChange={(event) => setCurrency(event.target.value)}
+              className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+            >
+              <option value="USDC">USDC on Arc</option>
+              <option value="EURC">EURC on Arc</option>
+            </select>
+          </div>
         </Field>
 
         <Field label="Description" hint="Optional. Tell the payer exactly what this request is for.">

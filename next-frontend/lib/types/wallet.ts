@@ -17,6 +17,12 @@ export type WalletUser = {
   network?: string;
 };
 
+export type WalletLoginChallenge = {
+  challengeId: string;
+  email: string;
+  message: string;
+};
+
 export type WalletTransaction = {
   id?: string;
   hash: string;

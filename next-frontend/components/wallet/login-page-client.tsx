@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { VeloxPayLogo } from "@/components/brand/veloxpay-logo";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { checkBackend, loginWallet } from "@/lib/api/wallet";
+import { checkBackend, sendWalletLoginCode, verifyWalletLoginCode } from "@/lib/api/wallet";
 import { getSavedWalletDisplayName, getStoredWalletUser, saveWalletUser } from "@/lib/session/wallet";
 import { RestoreInstructionsModal } from "./restore-instructions-modal";
 
@@ -15,6 +15,8 @@ export function LoginPageClient() {
   const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [displayName, setDisplayName] = useState("");
+  const [verificationCode, setVerificationCode] = useState("");
+  const [challengeId, setChallengeId] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [backendError, setBackendError] = useState("");
@@ -27,9 +29,13 @@ export function LoginPageClient() {
   useEffect(() => {
     const user = getStoredWalletUser();
     if (user) {
-      router.replace("/dashboard");
+      if (returnTo) {
+        router.replace(`/dashboard?returnTo=${encodeURIComponent(returnTo)}`);
+      } else {
+        router.replace("/dashboard");
+      }
     }
-  }, [router]);
+  }, [returnTo, router]);
 
   useEffect(() => {
     const emailFromLink = searchParams.get("email");
@@ -73,16 +79,51 @@ export function LoginPageClient() {
     }
 
     try {
-      const user = await loginWallet(email, displayName);
+      if (!challengeId) {
+        const challenge = await sendWalletLoginCode(email, displayName);
+        setChallengeId(challenge.challengeId);
+        setEmail(challenge.email || email);
+        setVerificationCode("");
+        return;
+      }
+
+      if (!verificationCode) {
+        setError("Enter the verification code from your email.");
+        return;
+      }
+
+      const user = await verifyWalletLoginCode(email, verificationCode, challengeId, displayName);
       saveWalletUser(user);
 
       if (returnTo) {
-        router.push(`/dashboard?returnTo=${encodeURIComponent(returnTo)}`);
+        router.push(returnTo);
       } else {
         router.push("/dashboard");
       }
     } catch (loginError) {
       setError(loginError instanceof Error ? loginError.message : "Unable to create your wallet.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleResendCode() {
+    setLoading(true);
+    setError("");
+
+    const healthy = await verifyBackend();
+    if (!healthy) {
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const challenge = await sendWalletLoginCode(email, displayName);
+      setChallengeId(challenge.challengeId);
+      setEmail(challenge.email || email);
+      setVerificationCode("");
+    } catch (loginError) {
+      setError(loginError instanceof Error ? loginError.message : "Unable to send a new code.");
     } finally {
       setLoading(false);
     }
@@ -103,7 +144,7 @@ export function LoginPageClient() {
           Create or restore your wallet
         </h1>
         <p className="mt-4 text-base leading-7 text-slate-600">
-          One email unlocks your wallet, balances, send and receive, activity history, and payment links.
+          One email unlocks your wallet, balances, send and receive, activity history, and payment requests.
         </p>
 
         {source === "veloxpay" ? (
@@ -119,7 +160,11 @@ export function LoginPageClient() {
               type="text"
               placeholder="Smart"
               value={displayName}
-              onChange={(event) => setDisplayName(event.target.value)}
+              onChange={(event) => {
+                setDisplayName(event.target.value);
+                setChallengeId("");
+                setVerificationCode("");
+              }}
               className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
             />
           </label>
@@ -130,10 +175,29 @@ export function LoginPageClient() {
               type="email"
               placeholder="you@example.com"
               value={email}
-              onChange={(event) => setEmail(event.target.value)}
+              onChange={(event) => {
+                setEmail(event.target.value);
+                setChallengeId("");
+                setVerificationCode("");
+              }}
               className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
             />
           </label>
+
+          {challengeId ? (
+            <label className="block space-y-2">
+              <span className="text-sm font-medium text-slate-700">Verification code</span>
+              <input
+                type="text"
+                inputMode="numeric"
+                maxLength={6}
+                placeholder="123456"
+                value={verificationCode}
+                onChange={(event) => setVerificationCode(event.target.value)}
+                className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+              />
+            </label>
+          ) : null}
         </div>
 
         {error ? (
@@ -142,12 +206,24 @@ export function LoginPageClient() {
 
         <div className="mt-6">
           <Button onClick={handleLogin} disabled={loading} className="w-full py-3 text-base">
-            {loading ? "Creating wallet..." : "Create / Restore wallet"}
+            {loading
+              ? challengeId ? "Verifying..." : "Sending code..."
+              : challengeId ? "Verify and continue" : "Create / Restore wallet"}
           </Button>
         </div>
 
+        {challengeId ? (
+          <button
+            onClick={handleResendCode}
+            disabled={loading}
+            className="mt-3 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-medium text-slate-600 transition hover:bg-slate-50"
+          >
+            Send a new code
+          </button>
+        ) : null}
+
         <div className="mt-6 text-center text-sm text-slate-500">
-          Use the same email again on any device and VeloxPay will bring back the same wallet.
+          Use the same email again on any device and VeloxPay will bring back the same wallet after email verification.
         </div>
 
         <div className="mt-5 flex flex-wrap items-center justify-center gap-3 text-sm">

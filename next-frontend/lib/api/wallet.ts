@@ -1,14 +1,26 @@
 import { backendFetch } from "./backend";
-import type { WalletBalances, WalletTransaction, WalletUser } from "@/lib/types/wallet";
+import type { WalletBalances, WalletLoginChallenge, WalletTransaction, WalletUser } from "@/lib/types/wallet";
 
 export async function checkBackend() {
   return backendFetch<{ status: string; message: string }>("/health");
 }
 
-export async function loginWallet(email: string, displayName?: string) {
-  return backendFetch<WalletUser>("/auth/login", {
+export async function sendWalletLoginCode(email: string, displayName?: string) {
+  return backendFetch<WalletLoginChallenge>("/auth/send-code", {
     method: "POST",
     body: JSON.stringify({ email, displayName }),
+  });
+}
+
+export async function verifyWalletLoginCode(
+  email: string,
+  verificationCode: string,
+  challengeId: string,
+  displayName?: string,
+) {
+  return backendFetch<WalletUser>("/auth/verify-code", {
+    method: "POST",
+    body: JSON.stringify({ email, verificationCode, challengeId, displayName }),
   });
 }
 
