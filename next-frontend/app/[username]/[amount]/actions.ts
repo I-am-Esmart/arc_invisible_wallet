@@ -11,6 +11,7 @@ export type PayActionState = {
   payerEmail?: string;
   transactionHash?: string;
   explorerUrl?: string;
+  receiptUrl?: string;
   createWalletUrl?: string;
 };
 
@@ -73,6 +74,7 @@ export async function payForPaymentLink(
         payerEmail,
         transactionHash: payment.transactionHash,
         explorerUrl: payment.explorerUrl,
+        receiptUrl: payment.receiptUrl,
       };
     }
 

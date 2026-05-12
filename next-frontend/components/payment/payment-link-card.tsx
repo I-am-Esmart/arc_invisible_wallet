@@ -31,6 +31,17 @@ export function PaymentLinkCard({
         {paymentLink.description || "This is a secure payment request. Complete it using the wallet flow below."}
       </p>
 
+      <div className="mt-4 flex flex-wrap gap-2 text-sm text-slate-500">
+        {paymentLink.recurrence?.interval && paymentLink.recurrence.interval !== "one-time" ? (
+          <span className="rounded-full bg-slate-100 px-3 py-1">{paymentLink.recurrence.label}</span>
+        ) : null}
+        {paymentLink.customerName || paymentLink.customerEmail ? (
+          <span className="rounded-full bg-slate-100 px-3 py-1">
+            For {paymentLink.customerName || paymentLink.customerEmail}
+          </span>
+        ) : null}
+      </div>
+
       <div className="mt-8 rounded-3xl bg-slate-50 p-6">
         <div className="text-sm text-slate-500">Payment request</div>
         <div className="mt-2 text-4xl font-semibold text-slate-900">

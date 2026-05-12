@@ -5,6 +5,7 @@ type PaymentStatusProps = {
   message?: string;
   transactionHash?: string;
   explorerUrl?: string;
+  receiptUrl?: string;
   createWalletUrl?: string;
 };
 
@@ -13,6 +14,7 @@ export function PaymentStatus({
   message,
   transactionHash,
   explorerUrl,
+  receiptUrl,
   createWalletUrl,
 }: PaymentStatusProps) {
   if (status === "idle") {
@@ -53,6 +55,14 @@ export function PaymentStatus({
               className="inline-flex items-center font-medium text-brand-600 hover:underline"
             >
               View on Arc Explorer
+            </a>
+          ) : null}
+          {receiptUrl ? (
+            <a
+              href={receiptUrl}
+              className="inline-flex items-center font-medium text-brand-600 hover:underline"
+            >
+              View receipt
             </a>
           ) : null}
         </div>

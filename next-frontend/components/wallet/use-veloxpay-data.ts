@@ -5,8 +5,10 @@ import { useRouter } from "next/navigation";
 import { fetchWalletBalances, fetchWalletTransactions, sendWalletTransaction } from "@/lib/api/wallet";
 import { listPaymentLinks } from "@/lib/api/payment-links";
 import { listPayments } from "@/lib/api/payments";
+import { listSavedCustomers } from "@/lib/api/customers";
 import { mergeAndStorePaymentLinks, readStoredPaymentLinks } from "@/lib/session/payment-links";
 import { clearWalletUser, getStoredWalletUser } from "@/lib/session/wallet";
+import type { SavedCustomer } from "@/lib/types/customer";
 import type { PaymentLink } from "@/lib/types/payment-link";
 import type { Payment } from "@/lib/types/payment";
 import type { WalletBalances, WalletTransaction, WalletUser } from "@/lib/types/wallet";
@@ -16,6 +18,7 @@ type Options = {
   includeTransactions?: boolean;
   includeLinks?: boolean;
   includePayments?: boolean;
+  includeCustomers?: boolean;
 };
 
 type ErrorState = {
@@ -23,6 +26,7 @@ type ErrorState = {
   transactions: string;
   links: string;
   payments: string;
+  customers: string;
 };
 
 const EMPTY_ERRORS: ErrorState = {
@@ -30,6 +34,7 @@ const EMPTY_ERRORS: ErrorState = {
   transactions: "",
   links: "",
   payments: "",
+  customers: "",
 };
 
 export function useVeloxPayData(options: Options = {}) {
@@ -38,6 +43,7 @@ export function useVeloxPayData(options: Options = {}) {
     includeTransactions = false,
     includeLinks = false,
     includePayments = false,
+    includeCustomers = false,
   } = options;
 
   const router = useRouter();
@@ -46,6 +52,7 @@ export function useVeloxPayData(options: Options = {}) {
   const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
   const [paymentLinks, setPaymentLinks] = useState<PaymentLink[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [customers, setCustomers] = useState<SavedCustomer[]>([]);
   const [loading, setLoading] = useState(true);
   const [errors, setErrors] = useState<ErrorState>(EMPTY_ERRORS);
 
@@ -105,9 +112,20 @@ export function useVeloxPayData(options: Options = {}) {
       );
     }
 
+    if (includeCustomers) {
+      tasks.push(
+        listSavedCustomers(user.email)
+          .then((result) => setCustomers(result))
+          .catch((error) => {
+            nextErrors.customers =
+              error instanceof Error ? error.message : "Unable to load customers.";
+          }),
+      );
+    }
+
     await Promise.all(tasks);
     setErrors(nextErrors);
-  }, [includeBalances, includeLinks, includePayments, includeTransactions]);
+  }, [includeBalances, includeCustomers, includeLinks, includePayments, includeTransactions]);
 
   useEffect(() => {
     const user = getStoredWalletUser();
@@ -139,6 +157,7 @@ export function useVeloxPayData(options: Options = {}) {
     transactions,
     paymentLinks,
     payments,
+    customers,
     errors,
     loading,
     totals,
@@ -212,6 +231,22 @@ export function useVeloxPayData(options: Options = {}) {
         setErrors((current) => ({
           ...current,
           payments: error instanceof Error ? error.message : "Unable to load payments.",
+        }));
+      }
+    },
+    refreshCustomers: async () => {
+      if (!walletUser || !includeCustomers) {
+        return;
+      }
+
+      try {
+        const result = await listSavedCustomers(walletUser.email);
+        setCustomers(result);
+        setErrors((current) => ({ ...current, customers: "" }));
+      } catch (error) {
+        setErrors((current) => ({
+          ...current,
+          customers: error instanceof Error ? error.message : "Unable to load customers.",
         }));
       }
     },

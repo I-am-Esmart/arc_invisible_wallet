@@ -1,4 +1,4 @@
-import type { PaymentCurrency } from "./payment-link";
+import type { PaymentCurrency, PaymentTimelineEvent } from "./payment-link";
 
 export type PaymentStatus = "pending" | "completed" | "failed";
 
@@ -9,7 +9,11 @@ export type Payment = {
   amount: string;
   currency: PaymentCurrency;
   status: PaymentStatus;
+  payerEmail?: string;
+  customerName?: string;
   transactionHash?: string;
   explorerUrl?: string;
+  receiptUrl?: string;
+  timeline?: PaymentTimelineEvent[];
   paidAt?: string;
 };

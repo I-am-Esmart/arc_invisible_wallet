@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Field } from "@/components/ui/field";
 import { upsertStoredPaymentLink } from "@/lib/session/payment-links";
+import type { SavedCustomer } from "@/lib/types/customer";
 import type { WalletUser } from "@/lib/types/wallet";
 
 const initialState: CreateLinkActionState = {
@@ -19,10 +20,12 @@ const OWNER_NAME_KEY = "veloxpay_owner_name";
 export function CreateLinkForm({
   compact = false,
   walletUser,
+  customers = [],
   onCreated,
 }: {
   compact?: boolean;
   walletUser?: WalletUser | null;
+  customers?: SavedCustomer[];
   onCreated?: (paymentLink?: CreateLinkActionState["paymentLink"]) => void;
 }) {
   const router = useRouter();
@@ -30,6 +33,9 @@ export function CreateLinkForm({
   const [ownerEmail, setOwnerEmail] = useState("");
   const [ownerName, setOwnerName] = useState("");
   const [currency, setCurrency] = useState("USDC");
+  const [customerEmail, setCustomerEmail] = useState("");
+  const [customerName, setCustomerName] = useState("");
+  const [recurrence, setRecurrence] = useState("one-time");
   const [copied, setCopied] = useState(false);
 
   function syncOwnerCookies(email: string, name: string) {
@@ -115,6 +121,27 @@ export function CreateLinkForm({
         Use this when you want to charge a client, collect for a service, request a deposit, or share a simple pay-me link.
       </div>
 
+      {customers.length ? (
+        <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
+          <div className="text-sm font-medium text-slate-900">Recent customers</div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {customers.slice(0, 6).map((customer) => (
+              <button
+                key={customer.email}
+                type="button"
+                onClick={() => {
+                  setCustomerEmail(customer.email);
+                  setCustomerName(customer.name || "");
+                }}
+                className="rounded-full bg-slate-100 px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-200"
+              >
+                {customer.name || customer.email}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
       <form action={formAction} className="mt-6 space-y-5">
         <input name="ownerEmail" type="hidden" value={ownerEmail} />
         <input name="ownerName" type="hidden" value={ownerName} />
@@ -190,6 +217,43 @@ export function CreateLinkForm({
             placeholder="Website design invoice"
             className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
           />
+        </Field>
+
+        <div className="grid gap-5 sm:grid-cols-2">
+          <Field label="Customer email" hint="Optional. Save a specific customer on this request for faster follow-up.">
+            <input
+              name="customerEmail"
+              type="email"
+              placeholder="client@example.com"
+              value={customerEmail}
+              onChange={(event) => setCustomerEmail(event.target.value)}
+              className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+            />
+          </Field>
+
+          <Field label="Customer name" hint="Optional. Helpful for retainers, subscriptions, or named invoices.">
+            <input
+              name="customerName"
+              type="text"
+              placeholder="Acme team"
+              value={customerName}
+              onChange={(event) => setCustomerName(event.target.value)}
+              className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+            />
+          </Field>
+        </div>
+
+        <Field label="Billing cadence" hint="Recurring requests stay reusable for weekly or monthly collections.">
+          <select
+            name="recurrence"
+            value={recurrence}
+            onChange={(event) => setRecurrence(event.target.value)}
+            className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+          >
+            <option value="one-time">One-time request</option>
+            <option value="weekly">Weekly recurring request</option>
+            <option value="monthly">Monthly recurring request</option>
+          </select>
         </Field>
 
         <Button type="submit" disabled={isPending}>

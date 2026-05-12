@@ -19,6 +19,9 @@ export async function createPaymentLinkAction(
   const ownerEmail = String(formData.get("ownerEmail") || "").trim();
   const ownerName = String(formData.get("ownerName") || "").trim();
   const currency = String(formData.get("currency") || "USDC").trim().toUpperCase();
+  const recurrence = String(formData.get("recurrence") || "one-time").trim();
+  const customerEmail = String(formData.get("customerEmail") || "").trim();
+  const customerName = String(formData.get("customerName") || "").trim();
 
   if (!amount) {
     return {
@@ -48,6 +51,9 @@ export async function createPaymentLinkAction(
       ownerEmail,
       ownerName: ownerName || undefined,
       currency,
+      recurrence,
+      customerEmail: customerEmail || undefined,
+      customerName: customerName || undefined,
     });
 
     return {
