@@ -7,6 +7,9 @@ type PaymentLinkPayload = {
   ownerEmail?: string;
   ownerName?: string;
   currency?: string;
+  recurrence?: string;
+  customerEmail?: string;
+  customerName?: string;
 };
 
 export async function getPaymentLinkByRoute(

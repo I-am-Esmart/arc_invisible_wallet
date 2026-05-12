@@ -99,6 +99,10 @@ function persistentOwnerPaymentsKey(email) {
   return `veloxpay:payments:owner:${normalizeEmail(email)}`;
 }
 
+function persistentPaymentKey(paymentId) {
+  return `veloxpay:payment:${String(paymentId || "").trim()}`;
+}
+
 async function runPersistentCommand(command, ...args) {
   if (!HAS_PERSISTENT_KV) {
     return null;
@@ -216,6 +220,8 @@ async function savePersistentPayment(payment) {
     return;
   }
 
+  await setPersistentJson(persistentPaymentKey(payment.id), payment);
+
   const listKey = persistentOwnerPaymentsKey(payment.ownerEmail);
   const existing = await getPersistentJson(listKey);
   const nextPayments = Array.isArray(existing) ? existing : [];
@@ -230,6 +236,31 @@ async function listPersistentPayments(ownerEmail) {
 
   const stored = await getPersistentJson(persistentOwnerPaymentsKey(ownerEmail));
   return Array.isArray(stored) ? stored : [];
+}
+
+async function getPersistentPayment(paymentId) {
+  if (!HAS_PERSISTENT_KV || !paymentId) {
+    return null;
+  }
+
+  return getPersistentJson(persistentPaymentKey(paymentId));
+}
+
+async function listPersistentCustomers(ownerEmail) {
+  if (!HAS_PERSISTENT_KV || !ownerEmail) {
+    return [];
+  }
+
+  const stored = await getPersistentJson(`veloxpay:customers:${normalizeEmail(ownerEmail)}`);
+  return Array.isArray(stored) ? stored : [];
+}
+
+async function savePersistentCustomers(ownerEmail, customers) {
+  if (!HAS_PERSISTENT_KV || !ownerEmail) {
+    return;
+  }
+
+  await setPersistentJson(`veloxpay:customers:${normalizeEmail(ownerEmail)}`, customers);
 }
 
 function getTokenConfig(token) {
@@ -364,7 +395,10 @@ function buildPaymentLinkToken(paymentLink) {
     a: paymentLink.amount,
     d: paymentLink.description,
     c: paymentLink.currency,
-    i: paymentLink.linkCode || paymentLink.id
+    i: paymentLink.linkCode || paymentLink.id,
+    r: paymentLink.recurrence?.interval || "one-time",
+    ce: paymentLink.customerEmail || "",
+    cn: paymentLink.customerName || ""
   };
 
   const payload = encodeBase64Url(
@@ -482,6 +516,9 @@ function readPaymentLinkFromToken(linkToken) {
   const description = parsed.d || parsed.description;
   const currency = parsed.c || parsed.currency;
   const linkCode = parsed.i || parsed.linkCode || parsed.id;
+  const recurrence = parsed.r || parsed.recurrence;
+  const customerEmail = parsed.ce || parsed.customerEmail;
+  const customerName = parsed.cn || parsed.customerName;
 
   if (!ownerEmail || !amount || !currency || !username || !linkCode) {
     return null;
@@ -501,6 +538,11 @@ function readPaymentLinkFromToken(linkToken) {
     amount: normalizeAmount(amount),
     description: description || "",
     currency: normalizeToken(currency),
+    recurrence: {
+      interval: recurrence || "one-time"
+    },
+    customerEmail: customerEmail ? normalizeEmail(customerEmail) : "",
+    customerName: customerName || "",
     status: "active",
     createdAt: new Date().toISOString()
   };
@@ -629,7 +671,8 @@ function createEmptyStore() {
     txs: [],
     paymentLinks: [],
     payments: [],
-    paymentAuthSessions: []
+    paymentAuthSessions: [],
+    customers: []
   };
 }
 
@@ -662,13 +705,34 @@ function readStore() {
     txs: Array.isArray(parsed.txs) ? parsed.txs : [],
     paymentLinks: Array.isArray(parsed.paymentLinks) ? parsed.paymentLinks : [],
     payments: Array.isArray(parsed.payments) ? parsed.payments : [],
-    paymentAuthSessions: Array.isArray(parsed.paymentAuthSessions) ? parsed.paymentAuthSessions : []
+    paymentAuthSessions: Array.isArray(parsed.paymentAuthSessions) ? parsed.paymentAuthSessions : [],
+    customers: Array.isArray(parsed.customers) ? parsed.customers : []
   };
 }
 
 function writeStore(store) {
   ensureStoreFile();
   fs.writeFileSync(STORE_PATH, JSON.stringify(store, null, 2));
+}
+
+async function syncStoredPaymentLink(store, paymentLink) {
+  if (!paymentLink?.linkCode) {
+    return paymentLink;
+  }
+
+  const index = store.paymentLinks.findIndex((entry) => entry.linkCode === paymentLink.linkCode || entry.id === paymentLink.id);
+
+  if (index >= 0) {
+    store.paymentLinks[index] = {
+      ...store.paymentLinks[index],
+      ...paymentLink
+    };
+  } else {
+    store.paymentLinks.push(paymentLink);
+  }
+
+  await savePersistentPaymentLink(paymentLink);
+  return paymentLink;
 }
 
 function cleanExpiredPaymentSessions(store) {
@@ -694,6 +758,10 @@ function buildPaymentLinkUrl(paymentLink) {
   return `${DEFAULT_LINK_BASE_URL}${buildPaymentLinkPath(paymentLink)}`;
 }
 
+function buildReceiptUrl(paymentId) {
+  return `${DEFAULT_LINK_BASE_URL}/receipt/${paymentId}`;
+}
+
 function hydratePaymentLinkAccess(paymentLink) {
   if (!paymentLink || !paymentLink.linkCode) {
     return paymentLink;
@@ -716,6 +784,85 @@ function buildPaymentLinkLabel(paymentLink) {
   }
 
   return `/${paymentLink.username}/${paymentLink.amount}`;
+}
+
+function createTimelineEvent(status, label, details) {
+  return {
+    id: crypto.randomUUID(),
+    status,
+    label,
+    details: details || "",
+    at: new Date().toISOString()
+  };
+}
+
+function appendTimelineEvent(entity, status, label, details) {
+  entity.timeline = Array.isArray(entity.timeline) ? entity.timeline : [];
+  entity.timeline.push(createTimelineEvent(status, label, details));
+  return entity;
+}
+
+function setTimelineEventOnce(entity, status, label, details) {
+  entity.timeline = Array.isArray(entity.timeline) ? entity.timeline : [];
+
+  if (!entity.timeline.some((event) => event.status === status)) {
+    entity.timeline.push(createTimelineEvent(status, label, details));
+  }
+
+  return entity;
+}
+
+function buildRecurrence(interval = "one-time", createdAt = new Date().toISOString()) {
+  const normalized = ["weekly", "monthly"].includes(String(interval)) ? String(interval) : "one-time";
+
+  if (normalized === "one-time") {
+    return {
+      interval: normalized,
+      label: "One-time request"
+    };
+  }
+
+  const nextDueAt = new Date(createdAt);
+
+  if (normalized === "weekly") {
+    nextDueAt.setDate(nextDueAt.getDate() + 7);
+  } else {
+    nextDueAt.setMonth(nextDueAt.getMonth() + 1);
+  }
+
+  return {
+    interval: normalized,
+    label: normalized === "weekly" ? "Weekly request" : "Monthly request",
+    nextDueAt: nextDueAt.toISOString()
+  };
+}
+
+function rememberCustomer(store, ownerEmail, customer) {
+  const normalizedOwnerEmail = normalizeEmail(ownerEmail);
+  const normalizedCustomerEmail = normalizeEmail(customer?.email);
+
+  if (!normalizedOwnerEmail || !normalizedCustomerEmail) {
+    return [];
+  }
+
+  const customers = Array.isArray(store.customers) ? store.customers : [];
+  const nextCustomer = {
+    ownerEmail: normalizedOwnerEmail,
+    email: normalizedCustomerEmail,
+    name: String(customer?.name || "").trim(),
+    lastPaidAt: customer?.lastPaidAt || new Date().toISOString()
+  };
+  store.customers = [
+    nextCustomer,
+    ...customers.filter((entry) => (
+      normalizeEmail(entry.ownerEmail) !== normalizedOwnerEmail
+      || normalizeEmail(entry.email) !== normalizedCustomerEmail
+    ))
+  ].slice(0, 50);
+
+  return store.customers
+    .filter((entry) => entry.ownerEmail === normalizedOwnerEmail)
+    .slice(0, 20);
 }
 
 function buildWalletCreateUrl(email, paymentLink) {
@@ -820,6 +967,20 @@ async function resolvePaymentLink(store, { linkId, username, amount, linkToken, 
   const normalizedAmount = amount ? String(amount).trim() : "";
   const normalizedLinkToken = String(linkToken || "").trim();
   const normalizedCurrency = currency ? normalizeToken(currency) : "";
+  const persistentLink = normalizedLinkId ? await getPersistentPaymentLink(normalizedLinkId) : null;
+
+  if (persistentLink) {
+    if (
+      (!normalizedUsername || persistentLink.username === normalizedUsername) &&
+      (!normalizedAmount || persistentLink.amount === normalizedAmount) &&
+      (!normalizedCurrency || persistentLink.currency === normalizedCurrency)
+    ) {
+      hydratePaymentLinkAccess(persistentLink);
+      persistentLink.url = buildPaymentLinkUrl(persistentLink);
+      return persistentLink;
+    }
+  }
+
   const fromCompactRoute = normalizedLinkId && normalizedUsername && normalizedAmount
     ? await readCompactPaymentLinkFromRoute(store, {
       linkId: normalizedLinkId,
@@ -859,20 +1020,6 @@ async function resolvePaymentLink(store, { linkId, username, amount, linkToken, 
       hydratePaymentLinkAccess(fromCode);
       fromCode.url = buildPaymentLinkUrl(fromCode);
       return fromCode;
-    }
-  }
-
-  const persistentLink = normalizedLinkId ? await getPersistentPaymentLink(normalizedLinkId) : null;
-
-  if (persistentLink) {
-    if (
-      (!normalizedUsername || persistentLink.username === normalizedUsername) &&
-      (!normalizedAmount || persistentLink.amount === normalizedAmount) &&
-      (!normalizedCurrency || persistentLink.currency === normalizedCurrency)
-    ) {
-      hydratePaymentLinkAccess(persistentLink);
-      persistentLink.url = buildPaymentLinkUrl(persistentLink);
-      return persistentLink;
     }
   }
 
@@ -1366,7 +1513,19 @@ function mapStoredPayment(payment) {
     status: payment.status,
     transactionHash: payment.transactionHash,
     explorerUrl: payment.explorerUrl,
-    paidAt: payment.paidAt
+    paidAt: payment.paidAt,
+    payerEmail: payment.payerEmail,
+    customerName: payment.customerName || "",
+    receiptUrl: payment.receiptUrl || buildReceiptUrl(payment.id),
+    timeline: Array.isArray(payment.timeline) ? payment.timeline : []
+  };
+}
+
+function mapStoredCustomer(customer) {
+  return {
+    email: normalizeEmail(customer.email),
+    name: String(customer.name || "").trim(),
+    lastPaidAt: customer.lastPaidAt || customer.updatedAt || customer.createdAt || ""
   };
 }
 
@@ -1644,6 +1803,13 @@ app.get("/payment-links/resolve", async (req, res) => {
       return res.status(404).json({ error: "Payment link not found" });
     }
 
+    if (paymentLink.linkCode) {
+      setTimelineEventOnce(paymentLink, "opened", "Opened by payer");
+      paymentLink.openedCount = Number(paymentLink.openedCount || 0) + 1;
+      await syncStoredPaymentLink(store, paymentLink);
+      writeStore(store);
+    }
+
     hydratePaymentLinkAccess(paymentLink);
     paymentLink.url = buildPaymentLinkUrl(paymentLink);
     res.json(paymentLink);
@@ -1655,7 +1821,7 @@ app.get("/payment-links/resolve", async (req, res) => {
 
 app.post("/payment-links", async (req, res) => {
   try {
-    const { amount, description, currency, ownerEmail, ownerName } = req.body;
+    const { amount, description, currency, ownerEmail, ownerName, recurrence, customerEmail, customerName } = req.body;
     const normalizedCurrency = normalizeToken(currency || DEFAULT_LINK_CURRENCY);
     const tokenConfig = getTokenConfig(normalizedCurrency);
 
@@ -1675,6 +1841,7 @@ app.post("/payment-links", async (req, res) => {
     const owner = await resolveOwnerIdentity(store, { email: ownerEmail, displayName: ownerName });
     const id = crypto.randomUUID();
     const normalizedAmount = normalizeAmount(amount);
+    const createdAt = new Date().toISOString();
     const paymentLink = {
       id,
       username: owner.username || DEFAULT_OWNER_USERNAME,
@@ -1684,8 +1851,12 @@ app.post("/payment-links", async (req, res) => {
       amount: normalizedAmount,
       description: description?.trim() || "",
       currency: tokenConfig.symbol,
+      recurrence: buildRecurrence(recurrence, createdAt),
+      customerEmail: normalizeEmail(customerEmail || ""),
+      customerName: String(customerName || "").trim(),
       status: "active",
-      createdAt: new Date().toISOString()
+      createdAt,
+      timeline: [createTimelineEvent("sent", "Payment request created")]
     };
 
     paymentLink.linkCode = generateShortPaymentLinkCode({
@@ -1695,8 +1866,15 @@ app.post("/payment-links", async (req, res) => {
     });
     paymentLink.linkToken = buildPaymentLinkToken(paymentLink);
     paymentLink.url = buildPaymentLinkUrl(paymentLink);
-    store.paymentLinks.push(paymentLink);
-    await savePersistentPaymentLink(paymentLink);
+    await syncStoredPaymentLink(store, paymentLink);
+    if (paymentLink.customerEmail) {
+      const nextCustomers = rememberCustomer(store, paymentLink.ownerEmail, {
+        email: paymentLink.customerEmail,
+        name: paymentLink.customerName || "",
+        lastPaidAt: paymentLink.createdAt
+      });
+      await savePersistentCustomers(paymentLink.ownerEmail, nextCustomers);
+    }
     writeStore(store);
 
     res.status(201).json(paymentLink);
@@ -1756,6 +1934,56 @@ app.get("/payments", async (req, res) => {
   }
 });
 
+app.get("/payments/:paymentId", async (req, res) => {
+  try {
+    const paymentId = String(req.params.paymentId || "").trim();
+
+    if (!paymentId) {
+      return res.status(400).json({ error: "Payment ID required" });
+    }
+
+    const store = readStore();
+    const payment = store.payments.find((entry) => entry.id === paymentId)
+      || await getPersistentPayment(paymentId);
+
+    if (!payment) {
+      return res.status(404).json({ error: "Receipt not found" });
+    }
+
+    res.json(mapStoredPayment(payment));
+  } catch (err) {
+    console.error("Get payment error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/customers", async (req, res) => {
+  try {
+    const ownerEmail = normalizeEmail(req.query.ownerEmail);
+
+    if (!ownerEmail) {
+      return res.status(400).json({ error: "Owner email required" });
+    }
+
+    const store = readStore();
+    const localCustomers = (Array.isArray(store.customers) ? store.customers : [])
+      .filter((customer) => normalizeEmail(customer.ownerEmail) === ownerEmail)
+      .map(mapStoredCustomer);
+    const persistentCustomers = (await listPersistentCustomers(ownerEmail)).map(mapStoredCustomer);
+
+    const customers = mergeUniqueByKey(
+      persistentCustomers,
+      localCustomers,
+      (customer) => customer.email
+    ).sort((a, b) => new Date(b.lastPaidAt || 0).getTime() - new Date(a.lastPaidAt || 0).getTime());
+
+    res.json(customers);
+  } catch (err) {
+    console.error("List customers error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post("/payment-links/:linkId/send-code", async (req, res) => {
   try {
     const { linkId } = req.params;
@@ -1790,6 +2018,10 @@ app.post("/payment-links/:linkId/send-code", async (req, res) => {
       expiresAt,
       linkToken: paymentLink.linkToken
     });
+
+    appendTimelineEvent(paymentLink, "code_requested", "Verification code requested", `Sent to ${payerEmail}`);
+    await syncStoredPaymentLink(store, paymentLink);
+    writeStore(store);
 
     await sendVerificationCodeEmail({
       to: payerEmail,
@@ -1876,15 +2108,32 @@ app.post("/payment-links/:linkId/confirm-payment", async (req, res) => {
       currency: paymentLink.currency,
       status: "completed",
       payerEmail,
+      customerName: paymentLink.customerName || "",
       recipientAddress: paymentLink.recipientAddress,
       transactionHash: transfer.hash,
       explorerUrl: transfer.explorer,
+      receiptUrl: buildReceiptUrl(paymentId),
       paidAt: new Date().toISOString(),
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      timeline: [
+        createTimelineEvent("sent", "Payment request created"),
+        createTimelineEvent("opened", "Payment page opened"),
+        createTimelineEvent("code_requested", "Verification code requested", `Sent to ${payerEmail}`),
+        createTimelineEvent("paid", "Payment completed", `${paymentLink.amount} ${paymentLink.currency}`)
+      ]
     };
 
+    appendTimelineEvent(paymentLink, "paid", "Payment completed", `${payment.amount} ${payment.currency}`);
+    paymentLink.lastPaidAt = payment.paidAt;
     store.payments.unshift(payment);
     await savePersistentPayment(payment);
+    await syncStoredPaymentLink(store, paymentLink);
+    const nextCustomers = rememberCustomer(store, paymentLink.ownerEmail, {
+      email: payerEmail,
+      name: paymentLink.customerName || "",
+      lastPaidAt: payment.paidAt
+    });
+    await savePersistentCustomers(paymentLink.ownerEmail, nextCustomers);
     store.txs.unshift({
       hash: transfer.hash,
       from: transfer.from,
@@ -1909,13 +2158,23 @@ app.post("/payment-links/:linkId/confirm-payment", async (req, res) => {
       currency: paymentLink.currency,
       status: "failed",
       payerEmail,
+      customerName: paymentLink.customerName || "",
       recipientAddress: paymentLink.recipientAddress,
       error: err.message,
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      receiptUrl: buildReceiptUrl(paymentId),
+      timeline: [
+        createTimelineEvent("sent", "Payment request created"),
+        createTimelineEvent("opened", "Payment page opened"),
+        createTimelineEvent("code_requested", "Verification code requested", `Sent to ${payerEmail}`),
+        createTimelineEvent("failed", "Payment failed", err.message)
+      ]
     };
 
+    appendTimelineEvent(paymentLink, "failed", "Payment attempt failed", err.message);
     store.payments.unshift(failedPayment);
     await savePersistentPayment(failedPayment);
+    await syncStoredPaymentLink(store, paymentLink);
     writeStore(store);
 
     console.error("Payment link confirm error:", err);

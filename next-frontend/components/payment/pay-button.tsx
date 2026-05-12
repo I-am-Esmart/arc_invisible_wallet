@@ -124,6 +124,7 @@ export function PayButton({
         message={state.message}
         transactionHash={state.transactionHash}
         explorerUrl={state.explorerUrl}
+        receiptUrl={state.receiptUrl}
         createWalletUrl={state.createWalletUrl}
       />
     </div>

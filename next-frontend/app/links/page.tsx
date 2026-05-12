@@ -8,9 +8,10 @@ import { WalletRequiredState } from "@/components/wallet/wallet-required-state";
 import { useVeloxPayData } from "@/components/wallet/use-veloxpay-data";
 
 export default function LinksPage() {
-  const { walletUser, paymentLinks, errors, refreshLinks, refreshPayments } = useVeloxPayData({
+  const { walletUser, paymentLinks, customers, errors, refreshLinks, refreshPayments, refreshCustomers } = useVeloxPayData({
     includeLinks: true,
     includePayments: true,
+    includeCustomers: true,
   });
 
   const activeLinks = useMemo(
@@ -46,24 +47,27 @@ export default function LinksPage() {
       <section className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
         <CreateLinkForm
           walletUser={walletUser}
+          customers={customers}
           onCreated={async () => {
             await refreshLinks();
             await refreshPayments();
+            await refreshCustomers();
           }}
         />
         <Card>
           <h2 className="text-lg font-semibold text-slate-900">How to use this well</h2>
           <div className="mt-4 space-y-3 text-sm leading-6 text-slate-600">
-            <p>Use a clear description like “Logo design deposit”, “Consulting session”, or “Community support”.</p>
-            <p>After you create the request, copy the link and send it anywhere you normally ask to be paid.</p>
-            <p>Once the money lands, it will also appear in your incoming payments view and wallet records.</p>
+            <p>Use a clear description like "Logo design deposit", "Consulting session", or "Community support".</p>
+            <p>Recurring weekly and monthly requests are great for retainers, subscriptions, and repeat invoices.</p>
+            <p>After you create the request, copy the link, show the QR code, or share the request anywhere you normally ask to be paid.</p>
+            <p>Once the money lands, it will appear in your incoming payments view, wallet records, and a shareable receipt page.</p>
           </div>
           <div className="mt-5 rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">
             <div className="font-semibold text-slate-900">Simple examples</div>
             <div className="mt-2 space-y-2">
               <p>Client invoice</p>
               <p>Donation request</p>
-              <p>Event access or digital download</p>
+              <p>Weekly retainer or monthly membership</p>
             </div>
           </div>
         </Card>

@@ -18,6 +18,10 @@ export async function listPayments(ownerEmail?: string) {
   return backendFetch<Payment[]>(`/payments${params.toString() ? `?${params.toString()}` : ""}`);
 }
 
+export async function getPaymentReceipt(paymentId: string) {
+  return backendFetch<Payment>(`/payments/${encodeURIComponent(paymentId)}`);
+}
+
 export async function startPaymentForLink(
   linkId: string,
   payload: {
