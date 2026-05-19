@@ -7,6 +7,7 @@ const path = require("path");
 const crypto = require("crypto");
 const zlib = require("zlib");
 const nodemailer = require("nodemailer");
+const { initiateDeveloperControlledWalletsClient } = require("@circle-fin/developer-controlled-wallets");
 
 const ERC20_ABI = [
   "function balanceOf(address owner) view returns (uint256)",
@@ -54,6 +55,23 @@ const LINK_CURRENCY_CODES = {
   USDC: "1",
   EURC: "2"
 };
+
+const CIRCLE_API_KEY = process.env.CIRCLE_API_KEY || "";
+const CIRCLE_API_URL = process.env.CIRCLE_API_URL || "https://api.circle.com";
+const CIRCLE_ENTITY_SECRET = process.env.CIRCLE_ENTITY_SECRET || "";
+const CIRCLE_WALLET_SET_ID = process.env.CIRCLE_WALLET_SET_ID || "";
+const CIRCLE_WALLET_SET_NAME = process.env.CIRCLE_WALLET_SET_NAME || "Invisible Wallet Set";
+const CIRCLE_BLOCKCHAIN = process.env.CIRCLE_BLOCKCHAIN || "ARC-TESTNET";
+const ENABLE_CIRCLE_WALLETS = Boolean(CIRCLE_API_KEY && CIRCLE_ENTITY_SECRET);
+const ENABLE_CIRCLE_WEBHOOK_VERIFICATION = Boolean(CIRCLE_API_KEY);
+const circleWalletsClient = ENABLE_CIRCLE_WALLETS
+  ? initiateDeveloperControlledWalletsClient({
+      apiKey: CIRCLE_API_KEY,
+      entitySecret: CIRCLE_ENTITY_SECRET
+    })
+  : null;
+
+const circleWebhookPublicKeyCache = new Map();
 
 function normalizeOrigin(origin) {
   return origin.replace(/\/$/, "");
@@ -668,6 +686,7 @@ function createEmptyStore() {
   return {
     users: {},
     wallets: {},
+    walletSetId: null,
     txs: [],
     paymentLinks: [],
     payments: [],
@@ -706,13 +725,205 @@ function readStore() {
     paymentLinks: Array.isArray(parsed.paymentLinks) ? parsed.paymentLinks : [],
     payments: Array.isArray(parsed.payments) ? parsed.payments : [],
     paymentAuthSessions: Array.isArray(parsed.paymentAuthSessions) ? parsed.paymentAuthSessions : [],
-    customers: Array.isArray(parsed.customers) ? parsed.customers : []
+    customers: Array.isArray(parsed.customers) ? parsed.customers : [],
+    walletSetId: parsed.walletSetId || null
   };
 }
 
 function writeStore(store) {
   ensureStoreFile();
   fs.writeFileSync(STORE_PATH, JSON.stringify(store, null, 2));
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function getCircleWalletSetId(store) {
+  if (!ENABLE_CIRCLE_WALLETS || !circleWalletsClient) {
+    return null;
+  }
+
+  if (CIRCLE_WALLET_SET_ID) {
+    return CIRCLE_WALLET_SET_ID;
+  }
+
+  if (store.walletSetId) {
+    return store.walletSetId;
+  }
+
+  const response = await circleWalletsClient.createWalletSet({
+    name: CIRCLE_WALLET_SET_NAME
+  });
+
+  const walletSetId = response?.data?.walletSet?.id;
+
+  if (!walletSetId) {
+    throw new Error("Circle wallet set creation failed");
+  }
+
+  store.walletSetId = walletSetId;
+  writeStore(store);
+  return walletSetId;
+}
+
+async function fetchCircleWebhookPublicKey(keyId) {
+  if (!keyId) {
+    throw new Error("Circle webhook key ID is required");
+  }
+
+  if (circleWebhookPublicKeyCache.has(keyId)) {
+    return circleWebhookPublicKeyCache.get(keyId);
+  }
+
+  const response = await fetch(`${CIRCLE_API_URL}/v2/cpn/notifications/publicKey/${encodeURIComponent(keyId)}`, {
+    headers: {
+      Authorization: `Bearer ${CIRCLE_API_KEY}`,
+      Accept: "application/json"
+    }
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Failed to fetch Circle webhook public key: ${response.status} ${body}`);
+  }
+
+  const data = await response.json();
+  const publicKeyBase64 = data?.data?.publicKey;
+  const algorithm = data?.data?.algorithm;
+
+  if (!publicKeyBase64 || !algorithm) {
+    throw new Error("Invalid Circle public key response");
+  }
+
+  const publicKey = crypto.createPublicKey({
+    key: Buffer.from(publicKeyBase64, "base64"),
+    format: "der",
+    type: "spki"
+  });
+
+  circleWebhookPublicKeyCache.set(keyId, { publicKey, algorithm });
+  return { publicKey, algorithm };
+}
+
+async function verifyCircleWebhookSignature(req) {
+  const signature = req.headers["x-circle-signature"] || req.headers["X-Circle-Signature"];
+  const keyId = req.headers["x-circle-key-id"] || req.headers["X-Circle-Key-Id"];
+
+  if (!signature || !keyId) {
+    throw new Error("Missing Circle webhook signature headers");
+  }
+
+  const rawBody = req.rawBody || Buffer.from(JSON.stringify(req.body), "utf8");
+  const signatureBytes = Buffer.from(String(signature), "base64");
+  const { publicKey, algorithm } = await fetchCircleWebhookPublicKey(String(keyId).trim());
+
+  if (algorithm !== "ECDSA_SHA_256") {
+    throw new Error(`Unsupported Circle webhook algorithm: ${algorithm}`);
+  }
+
+  const verified = crypto.verify("sha256", rawBody, publicKey, signatureBytes);
+
+  if (!verified) {
+    throw new Error("Invalid Circle webhook signature");
+  }
+}
+
+async function createCircleWallet(store) {
+  const walletSetId = await getCircleWalletSetId(store);
+
+  if (!walletSetId) {
+    throw new Error("Circle wallet integration is not configured");
+  }
+
+  const response = await circleWalletsClient.createWallets({
+    walletSetId,
+    blockchains: [CIRCLE_BLOCKCHAIN],
+    count: 1,
+    accountType: "SCA"
+  });
+
+  const wallet = response?.data?.wallets?.[0];
+
+  if (!wallet?.id || !wallet?.address) {
+    throw new Error("Circle wallet creation failed");
+  }
+
+  return {
+    walletId: wallet.id,
+    walletAddress: wallet.address,
+    walletSetId,
+    blockchain: CIRCLE_BLOCKCHAIN
+  };
+}
+
+async function executeCircleTokenTransfer(user, to, amount, tokenConfig) {
+  if (!ENABLE_CIRCLE_WALLETS || !circleWalletsClient) {
+    throw new Error("Circle wallet integration is not enabled");
+  }
+
+  const walletAddress = user.walletAddress || user.address;
+  const blockchain = user.blockchain || CIRCLE_BLOCKCHAIN;
+
+  if (!walletAddress) {
+    throw new Error("User wallet address is not available for Circle transaction");
+  }
+
+  const transferResponse = await circleWalletsClient.createTransaction({
+    blockchain,
+    walletAddress,
+    tokenAddress: tokenConfig.address,
+    destinationAddress: to,
+    amount: [String(amount)],
+    fee: {
+      type: "level",
+      config: { feeLevel: "MEDIUM" }
+    }
+  });
+
+  const transactionId = transferResponse?.data?.id;
+  if (!transactionId) {
+    throw new Error("Circle transaction creation failed");
+  }
+
+  let transaction;
+  const terminalStates = new Set(["COMPLETE", "FAILED", "CANCELLED", "DENIED"]);
+  const maxPolls = 40;
+  let pollCount = 0;
+
+  while (pollCount < maxPolls) {
+    await sleep(3000);
+    const pollResponse = await circleWalletsClient.getTransaction({ id: transactionId });
+    transaction = pollResponse?.data?.transaction;
+
+    if (!transaction) {
+      pollCount += 1;
+      continue;
+    }
+
+    if (terminalStates.has(transaction.state)) {
+      break;
+    }
+
+    pollCount += 1;
+  }
+
+  if (!transaction || transaction.state !== "COMPLETE") {
+    throw new Error(`Circle transaction failed or did not complete: ${transaction?.state || "unknown"}`);
+  }
+
+  const txHash = transaction.txHash || transaction.transactionHash || "";
+
+  return {
+    status: "ok",
+    hash: txHash,
+    from: walletAddress,
+    to,
+    amount: String(amount),
+    token: tokenConfig.symbol,
+    symbol: tokenConfig.symbol,
+    explorer: buildExplorerUrl(txHash)
+  };
 }
 
 async function syncStoredPaymentLink(store, paymentLink) {
@@ -923,6 +1134,15 @@ async function ensureUserRecord(store, { email, displayName }) {
       existingUser.displayName = displayNameFromEmail(normalizedEmail);
     }
 
+    if (ENABLE_CIRCLE_WALLETS && !existingUser.walletAddress) {
+      const wallet = await createCircleWallet(store);
+      existingUser.walletAddress = wallet.walletAddress;
+      existingUser.walletId = wallet.walletId;
+      existingUser.walletSetId = wallet.walletSetId;
+      existingUser.blockchain = wallet.blockchain;
+      existingUser.address = wallet.walletAddress;
+    }
+
     existingUser.updatedAt = new Date().toISOString();
     store.users[normalizedEmail] = existingUser;
     await savePersistentUser(existingUser);
@@ -939,6 +1159,15 @@ async function ensureUserRecord(store, { email, displayName }) {
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
   };
+
+  if (ENABLE_CIRCLE_WALLETS) {
+    const wallet = await createCircleWallet(store);
+    user.walletAddress = wallet.walletAddress;
+    user.walletId = wallet.walletId;
+    user.walletSetId = wallet.walletSetId;
+    user.blockchain = wallet.blockchain;
+    user.address = wallet.walletAddress;
+  }
 
   store.users[normalizedEmail] = user;
   await savePersistentUser(user);
@@ -1350,7 +1579,11 @@ const allowedOrigins = (process.env.FRONTEND_ORIGIN || "http://localhost:5173,ht
   .filter(Boolean);
 
 const app = express();
-app.use(express.json());
+app.use(express.json({
+  verify(req, res, buf) {
+    req.rawBody = buf;
+  }
+}));
 app.use(cors({
   origin(origin, callback) {
     if (!origin || allowedOrigins.includes(normalizeOrigin(origin))) {
@@ -1395,6 +1628,7 @@ function mapStoredUser(user) {
   return {
     email: user.email,
     address: user.address,
+    walletId: user.walletId || null,
     arcKeyId: user.arcKeyId,
     displayName: user.displayName,
     username: user.username
@@ -1445,13 +1679,23 @@ async function executeTokenTransfer({ to, amount, email, token }) {
     throw new Error("Missing required fields: to, amount, email, token");
   }
 
+  const store = readStore();
+  const user = await getStoredUser(store, email) || { email };
+
   const { signer } = walletFromEmail(email);
-  const signerAddress = await signer.getAddress();
+  const signerAddress = user.walletAddress || (await signer.getAddress());
 
   if (!ethers.isAddress(to)) {
     throw new Error("Invalid recipient address");
   }
 
+  // If Circle developer-controlled wallets are enabled and the user has a Circle wallet,
+  // route the transfer through Circle's wallets API which handles gas and signing.
+  if (ENABLE_CIRCLE_WALLETS && user && user.walletAddress) {
+    return executeCircleTokenTransfer(user, to, amount, tokenConfig);
+  }
+
+  // Fallback: local signer using ethers (existing behavior)
   const tokenContract = getTokenContract(tokenConfig.symbol, signer);
   const [rawTokenBalance, decimals, nativeBalance, feeData] = await Promise.all([
     tokenContract.balanceOf(signerAddress),
@@ -1556,6 +1800,18 @@ app.get("/", (req, res) => {
 
 app.get("/health", (req, res) => {
   res.json({ status: "ok", message: "Arc Wallet Backend is running" });
+});
+
+app.get("/webhooks/circle/status", (req, res) => {
+  res.json({
+    status: "ok",
+    webhookVerification: ENABLE_CIRCLE_WEBHOOK_VERIFICATION,
+    circleApiUrl: CIRCLE_API_URL,
+    requiredHeaders: ["X-Circle-Signature", "X-Circle-Key-Id"],
+    note: ENABLE_CIRCLE_WEBHOOK_VERIFICATION
+      ? "Signature verification is enabled."
+      : "Signature verification is disabled. Set CIRCLE_API_KEY to enable it."
+  });
 });
 
 app.post("/auth/send-code", async (req, res) => {
@@ -1757,6 +2013,71 @@ app.post("/send-transaction", async (req, res) => {
     res.json(transfer);
   } catch (err) {
     console.error("Send transaction error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/create-wallet", async (req, res) => {
+  try {
+    if (!ENABLE_CIRCLE_WALLETS) {
+      return res.status(400).json({ error: "Circle wallets not configured" });
+    }
+
+    const { email } = req.body || {};
+    if (!email) {
+      return res.status(400).json({ error: "Email required" });
+    }
+
+    const store = readStore();
+    const user = await ensureUserRecord(store, { email });
+
+    if (user.walletAddress) {
+      return res.json(mapStoredUser(user));
+    }
+
+    const wallet = await createCircleWallet(store);
+    user.walletAddress = wallet.walletAddress;
+    user.walletId = wallet.walletId;
+    user.walletSetId = wallet.walletSetId;
+    user.blockchain = wallet.blockchain;
+    user.address = wallet.walletAddress;
+    store.users[normalizeEmail(email)] = user;
+    writeStore(store);
+
+    res.json(mapStoredUser(user));
+  } catch (err) {
+    console.error("Create wallet error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Circle webhook receiver for real-time transaction updates
+app.post("/webhooks/circle", async (req, res) => {
+  try {
+    if (ENABLE_CIRCLE_WEBHOOK_VERIFICATION) {
+      await verifyCircleWebhookSignature(req);
+    }
+
+    const payload = req.body || {};
+    const store = readStore();
+
+    const tx = payload?.data?.transaction || payload?.data || payload;
+    const txHash = tx?.txHash || tx?.transactionHash || tx?.tx_hash || tx?.hash || tx?.id || null;
+    const state = tx?.state || payload?.type || "updated";
+
+    if (txHash) {
+      const idx = store.txs.findIndex((t) => t.hash === txHash || t.hash === tx?.id);
+      if (idx >= 0) {
+        store.txs[idx].status = state;
+        store.txs[idx].rawWebhook = payload;
+        writeStore(store);
+      }
+    }
+
+    console.log("Circle webhook received:", payload?.type || txHash || "(no-id)");
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("Webhook error:", err);
     res.status(500).json({ error: err.message });
   }
 });
