@@ -12,11 +12,13 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@circle-fin/adapter-circle-wallets": "^1.3.2",
+    "@circle-fin/app-kit": "^1.7.0",
+    "@circle-fin/developer-controlled-wallets": "^10.3.1",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "ethers": "^6.16.0",
     "express": "^5.2.1",
-    "@circle-fin/developer-controlled-wallets": "^10.3.1",
     "nodemailer": "^6.10.1"
   }
 }

@@ -53,6 +53,7 @@ export function saveWalletUser(user: WalletUser) {
   writeCookie("veloxpay_wallet_name", user.displayName || "");
   writeCookie("veloxpay_owner_email", user.email);
   writeCookie("veloxpay_owner_name", user.displayName || "");
+  writeCookie("veloxpay_wallet_session", user.sessionToken || "");
 }
 
 export function clearWalletUser() {
@@ -65,6 +66,7 @@ export function clearWalletUser() {
   clearCookie("veloxpay_wallet_name");
   clearCookie("veloxpay_owner_email");
   clearCookie("veloxpay_owner_name");
+  clearCookie("veloxpay_wallet_session");
 }
 
 export function getSavedWalletDisplayName() {

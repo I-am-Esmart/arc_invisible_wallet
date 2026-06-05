@@ -6,6 +6,7 @@ type PaymentLinkPayload = {
   description?: string;
   ownerEmail?: string;
   ownerName?: string;
+  walletSessionToken?: string;
   currency?: string;
   recurrence?: string;
   customerEmail?: string;

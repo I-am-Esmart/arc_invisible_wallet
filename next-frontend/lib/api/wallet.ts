@@ -49,6 +49,7 @@ export async function sendWalletTransaction(payload: {
   email: string;
   arcKeyId?: string;
   token: string;
+  walletSessionToken?: string;
 }) {
   return backendFetch<{
     hash: string;
