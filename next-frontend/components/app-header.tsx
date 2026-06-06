@@ -39,7 +39,6 @@ export function AppHeader() {
             { href: "/wallet", label: "Wallet" },
             { href: "/links", label: "Get paid" },
             { href: "/payments", label: "Payments" },
-            { href: "/features", label: "Arc features" },
           ]
         : [
             { href: "/", label: "Home" },

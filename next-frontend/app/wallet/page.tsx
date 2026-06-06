@@ -63,9 +63,6 @@ export default function WalletPage() {
           <Button asChild>
             <Link href="/wallet/send">Send</Link>
           </Button>
-          <Button asChild variant="secondary">
-            <Link href="/features">Arc features</Link>
-          </Button>
         </div>
       </section>
 

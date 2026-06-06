@@ -2846,7 +2846,7 @@ app.post("/bridge/quote", (req, res) => {
     route: `${fromChain} -> ${toChain}`,
     message: ENABLE_ARC_APP_KIT
       ? "Use Arc App Kit Bridge with the Circle Wallets adapter to execute this quote."
-      : "Install/configure Arc App Kit and an adapter to execute bridge transfers."
+      : "Bridge quotes are not live on this deployment yet. Add the Circle wallet and Arc App Kit env vars to the backend deployment to enable them."
   });
 });
 
@@ -2939,7 +2939,7 @@ app.post("/swaps/quote", (req, res) => {
     amount: String(amount),
     message: ENABLE_ARC_APP_KIT
       ? "Use Arc App Kit Swap to fetch a live executable quote."
-      : "Set up Arc App Kit Swap configuration before live quotes are available."
+      : "Swap quotes are not live on this deployment yet. Add the Circle wallet and Arc App Kit env vars to the backend deployment to enable them."
   });
 });
 

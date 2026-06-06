@@ -1,22 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { WalletRequiredState } from "@/components/wallet/wallet-required-state";
 import { useVeloxPayData } from "@/components/wallet/use-veloxpay-data";
-import {
-  createUserControlledWalletSession,
-  fetchCustodyOptions,
-  fetchFeatureCapabilities,
-  fetchSettlementReport,
-  fetchUnifiedBalance,
-  quoteBridge,
-  quoteSwap,
-  sendBatchTransfers,
-} from "@/lib/api/features";
-import type { FeatureCapabilities, FeatureStatus } from "@/lib/types/features";
+import { quoteBridge, quoteSwap, sendBatchTransfers } from "@/lib/api/features";
+import type { FeatureStatus } from "@/lib/types/features";
 
 const EMPTY_BRIDGE = {
   fromChain: "Base Sepolia",
@@ -31,64 +22,47 @@ const EMPTY_SWAP = {
   amount: "10.00",
 };
 
-function StatusBlock({ title, data }: { title: string; data: FeatureStatus | null }) {
-  if (!data) {
+function ResultCard({ title, result }: { title: string; result: FeatureStatus | null }) {
+  if (!result) {
     return null;
   }
 
+  const isConfigured = result.status !== "configuration_required";
+
   return (
-    <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-700">
-      <div className="font-semibold text-slate-900">{title}</div>
-      <pre className="mt-3 max-h-72 overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-5">
-        {JSON.stringify(data, null, 2)}
-      </pre>
+    <div
+      className={`rounded-2xl p-4 text-sm ${
+        isConfigured
+          ? "bg-emerald-50 text-emerald-800"
+          : "bg-amber-50 text-amber-900"
+      }`}
+    >
+      <div className="font-semibold">{title}</div>
+      <p className="mt-2 leading-6">
+        {typeof result.message === "string"
+          ? result.message
+          : isConfigured
+            ? "This flow is ready to continue."
+            : "This flow needs one more backend configuration step before it can run live."}
+      </p>
+      {typeof result.route === "string" ? <p className="mt-2">Route: {result.route}</p> : null}
+      {typeof result.estimatedDuration === "string" ? (
+        <p className="mt-1">Estimated timing: {result.estimatedDuration}</p>
+      ) : null}
+      {typeof result.nextStep === "string" ? <p className="mt-2">{result.nextStep}</p> : null}
     </div>
   );
 }
 
 export default function FeaturesPage() {
   const { walletUser } = useVeloxPayData({ includeBalances: false });
-  const [capabilities, setCapabilities] = useState<FeatureCapabilities | null>(null);
-  const [custody, setCustody] = useState<FeatureStatus | null>(null);
-  const [unifiedBalance, setUnifiedBalance] = useState<FeatureStatus | null>(null);
   const [bridgeForm, setBridgeForm] = useState(EMPTY_BRIDGE);
   const [swapForm, setSwapForm] = useState(EMPTY_SWAP);
   const [batchRows, setBatchRows] = useState("");
   const [bridgeQuote, setBridgeQuote] = useState<FeatureStatus | null>(null);
   const [swapQuote, setSwapQuote] = useState<FeatureStatus | null>(null);
   const [batchResult, setBatchResult] = useState<FeatureStatus | null>(null);
-  const [userWalletSession, setUserWalletSession] = useState<FeatureStatus | null>(null);
-  const [settlementReport, setSettlementReport] = useState<FeatureStatus | null>(null);
   const [error, setError] = useState("");
-
-  useEffect(() => {
-    async function load() {
-      try {
-        const [featuresResult, custodyResult] = await Promise.all([
-          fetchFeatureCapabilities(),
-          fetchCustodyOptions(),
-        ]);
-        setCapabilities(featuresResult);
-        setCustody(custodyResult);
-      } catch (loadError) {
-        setError(loadError instanceof Error ? loadError.message : "Unable to load Arc features.");
-      }
-    }
-
-    load();
-  }, []);
-
-  useEffect(() => {
-    if (!walletUser?.address) {
-      return;
-    }
-
-    fetchUnifiedBalance(walletUser.address)
-      .then(setUnifiedBalance)
-      .catch((loadError) => {
-        setError(loadError instanceof Error ? loadError.message : "Unable to load unified balance.");
-      });
-  }, [walletUser?.address]);
 
   const batchTransfers = useMemo(
     () =>
@@ -104,12 +78,13 @@ export default function FeaturesPage() {
   );
 
   if (!walletUser) {
-    return <WalletRequiredState title="Create your wallet before using advanced Arc features" />;
+    return <WalletRequiredState title="Create your wallet before using advanced tools" />;
   }
 
   async function handleBridgeQuote(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
+
     try {
       setBridgeQuote(await quoteBridge(bridgeForm));
     } catch (quoteError) {
@@ -120,6 +95,7 @@ export default function FeaturesPage() {
   async function handleSwapQuote(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
+
     try {
       setSwapQuote(await quoteSwap(swapForm));
     } catch (quoteError) {
@@ -129,11 +105,13 @@ export default function FeaturesPage() {
 
   async function handleBatchSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
     if (!walletUser) {
       return;
     }
 
     setError("");
+
     try {
       setBatchResult(await sendBatchTransfers({ email: walletUser.email, transfers: batchTransfers }));
     } catch (batchError) {
@@ -141,40 +119,14 @@ export default function FeaturesPage() {
     }
   }
 
-  async function handleUserWalletSession() {
-    if (!walletUser) {
-      return;
-    }
-
-    setError("");
-    try {
-      setUserWalletSession(await createUserControlledWalletSession(walletUser.email));
-    } catch (sessionError) {
-      setError(sessionError instanceof Error ? sessionError.message : "Unable to prepare user-controlled session.");
-    }
-  }
-
-  async function handleSettlementReport() {
-    if (!walletUser) {
-      return;
-    }
-
-    setError("");
-    try {
-      setSettlementReport(await fetchSettlementReport(walletUser.email));
-    } catch (reportError) {
-      setError(reportError instanceof Error ? reportError.message : "Unable to generate settlement report.");
-    }
-  }
-
   return (
     <main className="space-y-6">
       <section className="flex flex-col gap-4 rounded-3xl bg-white p-8 shadow-sm ring-1 ring-slate-200 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <p className="text-sm font-medium uppercase tracking-[0.2em] text-brand-600">Arc features</p>
-          <h1 className="mt-2 text-3xl font-semibold text-slate-900">Stablecoin rails for the next VeloxPay release</h1>
+          <p className="text-sm font-medium uppercase tracking-[0.2em] text-brand-600">Advanced tools</p>
+          <h1 className="mt-2 text-3xl font-semibold text-slate-900">Move and manage funds on Arc</h1>
           <p className="mt-3 max-w-2xl text-sm text-slate-600">
-            Manage Circle wallet custody, gasless Arc payments, cross-chain USDC funding, unified balance, swaps, batch payouts, and settlement reporting.
+            Bridge funding, stablecoin swaps, and batch payouts are being prepared for VeloxPay power users.
           </p>
         </div>
         <Button asChild variant="secondary">
@@ -184,60 +136,12 @@ export default function FeaturesPage() {
 
       {error ? <Card className="border border-rose-200 bg-rose-50 text-sm text-rose-700">{error}</Card> : null}
 
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <Card>
-          <div className="text-sm text-slate-500">Network</div>
-          <div className="mt-2 text-2xl font-semibold text-slate-950">{capabilities?.network.name || "Arc Testnet"}</div>
-          <p className="mt-2 text-sm text-slate-600">Gas is displayed in {capabilities?.network.gasToken || "USDC"}.</p>
-        </Card>
-        <Card>
-          <div className="text-sm text-slate-500">Finality</div>
-          <div className="mt-2 text-2xl font-semibold text-slate-950">Sub-second</div>
-          <p className="mt-2 text-sm text-slate-600">A single Arc confirmation is treated as final settlement.</p>
-        </Card>
-        <Card>
-          <div className="text-sm text-slate-500">Developer wallets</div>
-          <div className="mt-2 text-2xl font-semibold text-slate-950">{capabilities?.wallets.developerControlled ? "On" : "Setup"}</div>
-          <p className="mt-2 text-sm text-slate-600">{walletUser.custodyType || "circle-developer-controlled"}</p>
-        </Card>
-        <Card>
-          <div className="text-sm text-slate-500">Gasless mode</div>
-          <div className="mt-2 text-2xl font-semibold text-slate-950">{capabilities?.wallets.gasStation ? "Ready" : "USDC gas"}</div>
-          <p className="mt-2 text-sm text-slate-600">{walletUser.gasMode || "usdc-native"}</p>
-        </Card>
-      </section>
-
-      <section className="grid gap-6 xl:grid-cols-2">
-        <Card>
-          <h2 className="text-lg font-semibold text-slate-900">Circle wallet custody</h2>
-          <p className="mt-2 text-sm text-slate-600">
-            VeloxPay can run invisible merchant flows with developer-controlled wallets and expose a user-controlled path for direct user approval.
-          </p>
-          <div className="mt-4 flex flex-wrap gap-3">
-            <Button type="button" onClick={handleUserWalletSession}>Prepare user-controlled session</Button>
-            <Button type="button" variant="secondary" onClick={handleSettlementReport}>Generate settlement report</Button>
-          </div>
-          <div className="mt-5 space-y-4">
-            <StatusBlock title="Custody options" data={custody} />
-            <StatusBlock title="User-controlled session" data={userWalletSession} />
-            <StatusBlock title="Settlement report" data={settlementReport} />
-          </div>
-        </Card>
-
-        <Card>
-          <h2 className="text-lg font-semibold text-slate-900">Unified Balance</h2>
-          <p className="mt-2 text-sm text-slate-600">
-            Start with the user&apos;s Arc USDC balance and extend to Circle Gateway/App Kit when cross-chain sources are configured.
-          </p>
-          <div className="mt-5">
-            <StatusBlock title="Unified balance" data={unifiedBalance} />
-          </div>
-        </Card>
-      </section>
-
       <section className="grid gap-6 xl:grid-cols-2">
         <Card>
           <h2 className="text-lg font-semibold text-slate-900">Bridge USDC to Arc</h2>
+          <p className="mt-2 text-sm text-slate-600">
+            Estimate a USDC funding route into Arc before moving funds.
+          </p>
           <form onSubmit={handleBridgeQuote} className="mt-4 space-y-4">
             <input
               value={bridgeForm.fromChain}
@@ -251,15 +155,18 @@ export default function FeaturesPage() {
               className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm"
               aria-label="Bridge amount"
             />
-            <Button type="submit">Quote bridge</Button>
+            <Button type="submit">Check bridge route</Button>
           </form>
           <div className="mt-5">
-            <StatusBlock title="Bridge quote" data={bridgeQuote} />
+            <ResultCard title="Bridge status" result={bridgeQuote} />
           </div>
         </Card>
 
         <Card>
           <h2 className="text-lg font-semibold text-slate-900">Swap stablecoins</h2>
+          <p className="mt-2 text-sm text-slate-600">
+            Prepare a stablecoin swap quote for Arc balances.
+          </p>
           <form onSubmit={handleSwapQuote} className="mt-4 space-y-4">
             <select
               value={swapForm.fromToken}
@@ -285,10 +192,10 @@ export default function FeaturesPage() {
               className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm"
               aria-label="Swap amount"
             />
-            <Button type="submit">Quote swap</Button>
+            <Button type="submit">Check swap route</Button>
           </form>
           <div className="mt-5">
-            <StatusBlock title="Swap quote" data={swapQuote} />
+            <ResultCard title="Swap status" result={swapQuote} />
           </div>
         </Card>
       </section>
@@ -310,7 +217,7 @@ export default function FeaturesPage() {
           <Button type="submit" disabled={batchTransfers.length === 0}>Run batch payout</Button>
         </form>
         <div className="mt-5">
-          <StatusBlock title="Batch result" data={batchResult} />
+          <ResultCard title="Batch payout status" result={batchResult} />
         </div>
       </Card>
     </main>
