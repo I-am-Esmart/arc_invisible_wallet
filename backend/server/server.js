@@ -76,7 +76,8 @@ const ENABLE_CIRCLE_WALLETS = Boolean(CIRCLE_API_KEY && CIRCLE_ENTITY_SECRET);
 const ENABLE_CIRCLE_WEBHOOK_VERIFICATION = Boolean(CIRCLE_API_KEY);
 const ENABLE_CIRCLE_GAS_STATION = String(process.env.CIRCLE_GAS_STATION_ENABLED || "true").toLowerCase() !== "false";
 const ENABLE_USER_CONTROLLED_WALLETS = Boolean(process.env.CIRCLE_USER_CONTROLLED_APP_ID);
-const ENABLE_ARC_APP_KIT = Boolean(CIRCLE_API_KEY && CIRCLE_ENTITY_SECRET);
+const ENABLE_ARC_APP_KIT = Boolean(ARC_APP_KIT_KEY);
+const ENABLE_ARC_APP_KIT_EXECUTION = Boolean(ARC_APP_KIT_KEY && CIRCLE_API_KEY && CIRCLE_ENTITY_SECRET);
 const circleWalletsClient = ENABLE_CIRCLE_WALLETS
   ? initiateDeveloperControlledWalletsClient({
       apiKey: CIRCLE_API_KEY,
@@ -394,7 +395,8 @@ function buildFeatureCapabilities() {
       available: ENABLE_ARC_APP_KIT,
       bridge: ENABLE_ARC_APP_KIT,
       unifiedBalance: ENABLE_ARC_APP_KIT,
-      swaps: ENABLE_ARC_APP_KIT
+      swaps: ENABLE_ARC_APP_KIT,
+      execution: ENABLE_ARC_APP_KIT_EXECUTION
     },
     tokens: Object.keys(TOKENS)
   };
@@ -438,7 +440,12 @@ function buildReadinessReport() {
     {
       id: "app_kit",
       ok: ENABLE_ARC_APP_KIT,
-      message: "Set ARC_APP_KIT_KEY and install/configure Arc App Kit adapters for live bridge, swap, and Unified Balance execution."
+      message: "Set ARC_APP_KIT_KEY for Arc App Kit quote/prep flows."
+    },
+    {
+      id: "app_kit_execution",
+      ok: ENABLE_ARC_APP_KIT_EXECUTION,
+      message: "Set ARC_APP_KIT_KEY, CIRCLE_API_KEY, and CIRCLE_ENTITY_SECRET for live bridge, swap, and Unified Balance execution."
     },
     {
       id: "user_controlled_wallets",
@@ -2788,7 +2795,7 @@ app.get("/unified-balance", async (req, res) => {
     const arcBalances = await fetchAllTokenBalances(address);
     let appKitBalance = null;
 
-    if (ENABLE_ARC_APP_KIT && req.query.useAppKit === "true") {
+    if (ENABLE_ARC_APP_KIT_EXECUTION && req.query.useAppKit === "true") {
       try {
         appKitBalance = await getUnifiedBalanceWithCircleWallets({
           apiKey: CIRCLE_API_KEY,
@@ -2861,8 +2868,8 @@ app.post("/bridge", async (req, res) => {
     execute = false
   } = req.body || {};
 
-  if (!ENABLE_ARC_APP_KIT) {
-    return res.status(202).json(buildUnavailableFeature("Arc App Kit Bridge", "Arc App Kit packages and adapter configuration"));
+  if (!ENABLE_ARC_APP_KIT_EXECUTION) {
+    return res.status(202).json(buildUnavailableFeature("Arc App Kit Bridge", "ARC_APP_KIT_KEY, CIRCLE_API_KEY, and CIRCLE_ENTITY_SECRET"));
   }
 
   if (normalizeToken(token) !== "USDC") {
@@ -2944,8 +2951,8 @@ app.post("/swaps/quote", (req, res) => {
 });
 
 app.post("/swaps", (req, res) => {
-  if (!ENABLE_ARC_APP_KIT) {
-    return res.status(202).json(buildUnavailableFeature("Arc App Kit Swap", "Arc App Kit swap configuration and a Circle Console kit key"));
+  if (!ENABLE_ARC_APP_KIT_EXECUTION) {
+    return res.status(202).json(buildUnavailableFeature("Arc App Kit Swap", "ARC_APP_KIT_KEY, CIRCLE_API_KEY, and CIRCLE_ENTITY_SECRET"));
   }
 
   const {
