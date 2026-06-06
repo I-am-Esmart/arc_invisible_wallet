@@ -28,13 +28,33 @@ function buildBackendUrl(path: string) {
   return `${backendApiUrl.replace(/\/$/, "")}${path}`;
 }
 
+function getWalletSessionHeader() {
+  if (typeof window === "undefined") {
+    return {};
+  }
+
+  try {
+    const stored = JSON.parse(window.localStorage.getItem("veloxpay_wallet_user") || "null") as {
+      sessionToken?: string;
+    } | null;
+
+    return stored?.sessionToken ? { "X-VeloxPay-Session": stored.sessionToken } : {};
+  } catch {
+    return {};
+  }
+}
+
 export async function backendFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  const headers = new Headers(init?.headers);
+  headers.set("Content-Type", "application/json");
+
+  for (const [key, value] of Object.entries(getWalletSessionHeader())) {
+    headers.set(key, value);
+  }
+
   const response = await fetch(buildBackendUrl(path), {
     ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(init?.headers || {}),
-    },
+    headers,
     cache: "no-store",
   });
 

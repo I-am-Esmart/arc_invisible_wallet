@@ -11,10 +11,15 @@ export type WalletUser = {
   email: string;
   address: string;
   arcKeyId: string;
+  walletId?: string | null;
   displayName?: string;
   username?: string;
   balances?: WalletBalances;
   network?: string;
+  custodyType?: string;
+  accountType?: string;
+  gasMode?: string;
+  sessionToken?: string;
 };
 
 export type WalletLoginChallenge = {

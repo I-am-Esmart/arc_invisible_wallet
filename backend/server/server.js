@@ -7,6 +7,12 @@ const path = require("path");
 const crypto = require("crypto");
 const zlib = require("zlib");
 const nodemailer = require("nodemailer");
+const { initiateDeveloperControlledWalletsClient } = require("@circle-fin/developer-controlled-wallets");
+const {
+  executeBridgeWithCircleWallets,
+  executeSwapWithCircleWallets,
+  getUnifiedBalanceWithCircleWallets
+} = require("./arc-app-kit");
 
 const ERC20_ABI = [
   "function balanceOf(address owner) view returns (uint256)",
@@ -41,6 +47,10 @@ const WALLET_APP_BASE_URL = (process.env.WALLET_APP_BASE_URL || DEFAULT_LINK_BAS
 const PAYMENT_LINK_SIGNING_SECRET = process.env.PAYMENT_LINK_SIGNING_SECRET || "veloxpay-demo-secret";
 const OTP_CODE_TTL_MINUTES = Math.max(1, Number(process.env.OTP_CODE_TTL_MINUTES || 10));
 const OTP_MAX_ATTEMPTS = Math.max(1, Number(process.env.OTP_MAX_ATTEMPTS || 5));
+const WALLET_SESSION_TTL_DAYS = Math.max(1, Number(process.env.WALLET_SESSION_TTL_DAYS || 30));
+const REQUIRE_WALLET_SESSION = String(
+  process.env.REQUIRE_WALLET_SESSION || (process.env.NODE_ENV === "production" ? "true" : "false")
+).toLowerCase() === "true";
 const TRANSFER_HISTORY_LOOKBACK_BLOCKS = Math.max(2000, Number(process.env.TRANSFER_HISTORY_LOOKBACK_BLOCKS || 50000));
 const LOG_QUERY_CHUNK_SIZE = Math.max(250, Number(process.env.LOG_QUERY_CHUNK_SIZE || 5000));
 const MAX_HISTORY_ITEMS = Math.max(10, Number(process.env.MAX_HISTORY_ITEMS || 20));
@@ -55,6 +65,28 @@ const LINK_CURRENCY_CODES = {
   EURC: "2"
 };
 
+const CIRCLE_API_KEY = process.env.CIRCLE_API_KEY || "";
+const CIRCLE_API_URL = process.env.CIRCLE_API_URL || "https://api.circle.com";
+const CIRCLE_ENTITY_SECRET = process.env.CIRCLE_ENTITY_SECRET || "";
+const CIRCLE_WALLET_SET_ID = process.env.CIRCLE_WALLET_SET_ID || "";
+const CIRCLE_WALLET_SET_NAME = process.env.CIRCLE_WALLET_SET_NAME || "Invisible Wallet Set";
+const CIRCLE_BLOCKCHAIN = process.env.CIRCLE_BLOCKCHAIN || "ARC-TESTNET";
+const ARC_APP_KIT_KEY = process.env.ARC_APP_KIT_KEY || process.env.KIT_KEY || "";
+const ENABLE_CIRCLE_WALLETS = Boolean(CIRCLE_API_KEY && CIRCLE_ENTITY_SECRET);
+const ENABLE_CIRCLE_WEBHOOK_VERIFICATION = Boolean(CIRCLE_API_KEY);
+const ENABLE_CIRCLE_GAS_STATION = String(process.env.CIRCLE_GAS_STATION_ENABLED || "true").toLowerCase() !== "false";
+const ENABLE_USER_CONTROLLED_WALLETS = Boolean(process.env.CIRCLE_USER_CONTROLLED_APP_ID);
+const ENABLE_ARC_APP_KIT = Boolean(CIRCLE_API_KEY && CIRCLE_ENTITY_SECRET);
+const circleWalletsClient = ENABLE_CIRCLE_WALLETS
+  ? initiateDeveloperControlledWalletsClient({
+      apiKey: CIRCLE_API_KEY,
+      entitySecret: CIRCLE_ENTITY_SECRET
+    })
+  : null;
+
+const circleWebhookPublicKeyCache = new Map();
+const requestRateLimitCache = new Map();
+
 function normalizeOrigin(origin) {
   return origin.replace(/\/$/, "");
 }
@@ -67,8 +99,35 @@ function normalizeToken(token) {
   return (token || "USDC").toUpperCase();
 }
 
+function enforceRateLimit(key, { limit, windowMs }) {
+  const now = Date.now();
+  const entry = requestRateLimitCache.get(key) || { count: 0, resetAt: now + windowMs };
+
+  if (entry.resetAt <= now) {
+    entry.count = 0;
+    entry.resetAt = now + windowMs;
+  }
+
+  entry.count += 1;
+  requestRateLimitCache.set(key, entry);
+
+  if (entry.count > limit) {
+    const error = new Error("Too many attempts. Please wait a moment and try again.");
+    error.statusCode = 429;
+    throw error;
+  }
+}
+
 function normalizeAmount(amount) {
   return Number(amount).toString();
+}
+
+function assertPositiveAmount(amount, label = "Amount") {
+  const numericAmount = Number(amount);
+
+  if (!String(amount || "").trim() || Number.isNaN(numericAmount) || numericAmount <= 0) {
+    throw new Error(`${label} must be a positive number`);
+  }
 }
 
 function currencyCodeForToken(token) {
@@ -306,6 +365,93 @@ function usernameFromOwner(email, ownerName) {
 
 function buildExplorerUrl(hash) {
   return `${ARC_EXPLORER_BASE_URL}/${hash}`;
+}
+
+function buildFeatureCapabilities() {
+  return {
+    network: {
+      name: "Arc Testnet",
+      blockchain: CIRCLE_BLOCKCHAIN,
+      explorerBaseUrl: ARC_EXPLORER_BASE_URL,
+      finality: "deterministic-sub-second",
+      gasToken: "USDC"
+    },
+    wallets: {
+      developerControlled: ENABLE_CIRCLE_WALLETS,
+      userControlled: ENABLE_USER_CONTROLLED_WALLETS,
+      defaultAccountType: "SCA",
+      gasStation: ENABLE_CIRCLE_WALLETS && ENABLE_CIRCLE_GAS_STATION
+    },
+    payments: {
+      links: true,
+      receipts: true,
+      recurringRequests: true,
+      batchTransfers: true,
+      simulation: true,
+      settlementReports: true
+    },
+    appKit: {
+      available: ENABLE_ARC_APP_KIT,
+      bridge: ENABLE_ARC_APP_KIT,
+      unifiedBalance: ENABLE_ARC_APP_KIT,
+      swaps: ENABLE_ARC_APP_KIT
+    },
+    tokens: Object.keys(TOKENS)
+  };
+}
+
+function buildUnavailableFeature(featureName, setupHint) {
+  return {
+    status: "configuration_required",
+    feature: featureName,
+    message: `${featureName} is wired into VeloxPay, but needs ${setupHint} before live execution.`
+  };
+}
+
+function buildReadinessReport() {
+  const checks = [
+    {
+      id: "payment_link_secret",
+      ok: Boolean(PAYMENT_LINK_SIGNING_SECRET && PAYMENT_LINK_SIGNING_SECRET !== "veloxpay-demo-secret"),
+      message: "Set PAYMENT_LINK_SIGNING_SECRET to a strong random value."
+    },
+    {
+      id: "persistent_storage",
+      ok: HAS_PERSISTENT_KV,
+      message: "Set UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN for durable production storage."
+    },
+    {
+      id: "circle_developer_wallets",
+      ok: ENABLE_CIRCLE_WALLETS,
+      message: "Set CIRCLE_API_KEY and a rotated CIRCLE_ENTITY_SECRET for Circle developer-controlled wallets."
+    },
+    {
+      id: "wallet_sessions",
+      ok: REQUIRE_WALLET_SESSION,
+      message: "Set REQUIRE_WALLET_SESSION=true in production."
+    },
+    {
+      id: "email_delivery",
+      ok: Boolean((process.env.SMTP_USER && (process.env.SMTP_PASS || process.env.GMAIL_APP_PASSWORD)) || (process.env.RESEND_API_KEY && process.env.OTP_FROM_EMAIL)),
+      message: "Configure SMTP or Resend for OTP delivery."
+    },
+    {
+      id: "app_kit",
+      ok: ENABLE_ARC_APP_KIT,
+      message: "Set ARC_APP_KIT_KEY and install/configure Arc App Kit adapters for live bridge, swap, and Unified Balance execution."
+    },
+    {
+      id: "user_controlled_wallets",
+      ok: ENABLE_USER_CONTROLLED_WALLETS,
+      message: "Set CIRCLE_USER_CONTROLLED_APP_ID and add Circle Web SDK challenge execution for user-controlled wallets."
+    }
+  ];
+
+  return {
+    status: checks.every((check) => check.ok) ? "ready" : "action_required",
+    generatedAt: new Date().toISOString(),
+    checks
+  };
 }
 
 function escapeHtml(value) {
@@ -668,6 +814,7 @@ function createEmptyStore() {
   return {
     users: {},
     wallets: {},
+    walletSetId: null,
     txs: [],
     paymentLinks: [],
     payments: [],
@@ -706,13 +853,209 @@ function readStore() {
     paymentLinks: Array.isArray(parsed.paymentLinks) ? parsed.paymentLinks : [],
     payments: Array.isArray(parsed.payments) ? parsed.payments : [],
     paymentAuthSessions: Array.isArray(parsed.paymentAuthSessions) ? parsed.paymentAuthSessions : [],
-    customers: Array.isArray(parsed.customers) ? parsed.customers : []
+    customers: Array.isArray(parsed.customers) ? parsed.customers : [],
+    walletSetId: parsed.walletSetId || null
   };
 }
 
 function writeStore(store) {
   ensureStoreFile();
   fs.writeFileSync(STORE_PATH, JSON.stringify(store, null, 2));
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function getCircleWalletSetId(store) {
+  if (!ENABLE_CIRCLE_WALLETS || !circleWalletsClient) {
+    return null;
+  }
+
+  if (CIRCLE_WALLET_SET_ID) {
+    return CIRCLE_WALLET_SET_ID;
+  }
+
+  if (store.walletSetId) {
+    return store.walletSetId;
+  }
+
+  const response = await circleWalletsClient.createWalletSet({
+    name: CIRCLE_WALLET_SET_NAME
+  });
+
+  const walletSetId = response?.data?.walletSet?.id;
+
+  if (!walletSetId) {
+    throw new Error("Circle wallet set creation failed");
+  }
+
+  store.walletSetId = walletSetId;
+  writeStore(store);
+  return walletSetId;
+}
+
+async function fetchCircleWebhookPublicKey(keyId) {
+  if (!keyId) {
+    throw new Error("Circle webhook key ID is required");
+  }
+
+  if (circleWebhookPublicKeyCache.has(keyId)) {
+    return circleWebhookPublicKeyCache.get(keyId);
+  }
+
+  const response = await fetch(`${CIRCLE_API_URL}/v2/cpn/notifications/publicKey/${encodeURIComponent(keyId)}`, {
+    headers: {
+      Authorization: `Bearer ${CIRCLE_API_KEY}`,
+      Accept: "application/json"
+    }
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Failed to fetch Circle webhook public key: ${response.status} ${body}`);
+  }
+
+  const data = await response.json();
+  const publicKeyBase64 = data?.data?.publicKey;
+  const algorithm = data?.data?.algorithm;
+
+  if (!publicKeyBase64 || !algorithm) {
+    throw new Error("Invalid Circle public key response");
+  }
+
+  const publicKey = crypto.createPublicKey({
+    key: Buffer.from(publicKeyBase64, "base64"),
+    format: "der",
+    type: "spki"
+  });
+
+  circleWebhookPublicKeyCache.set(keyId, { publicKey, algorithm });
+  return { publicKey, algorithm };
+}
+
+async function verifyCircleWebhookSignature(req) {
+  const signature = req.headers["x-circle-signature"] || req.headers["X-Circle-Signature"];
+  const keyId = req.headers["x-circle-key-id"] || req.headers["X-Circle-Key-Id"];
+
+  if (!signature || !keyId) {
+    throw new Error("Missing Circle webhook signature headers");
+  }
+
+  const rawBody = req.rawBody || Buffer.from(JSON.stringify(req.body), "utf8");
+  const signatureBytes = Buffer.from(String(signature), "base64");
+  const { publicKey, algorithm } = await fetchCircleWebhookPublicKey(String(keyId).trim());
+
+  if (algorithm !== "ECDSA_SHA_256") {
+    throw new Error(`Unsupported Circle webhook algorithm: ${algorithm}`);
+  }
+
+  const verified = crypto.verify("sha256", rawBody, publicKey, signatureBytes);
+
+  if (!verified) {
+    throw new Error("Invalid Circle webhook signature");
+  }
+}
+
+async function createCircleWallet(store) {
+  const walletSetId = await getCircleWalletSetId(store);
+
+  if (!walletSetId) {
+    throw new Error("Circle wallet integration is not configured");
+  }
+
+  const response = await circleWalletsClient.createWallets({
+    walletSetId,
+    blockchains: [CIRCLE_BLOCKCHAIN],
+    count: 1,
+    accountType: "SCA"
+  });
+
+  const wallet = response?.data?.wallets?.[0];
+
+  if (!wallet?.id || !wallet?.address) {
+    throw new Error("Circle wallet creation failed");
+  }
+
+  return {
+    walletId: wallet.id,
+    walletAddress: wallet.address,
+    walletSetId,
+    blockchain: CIRCLE_BLOCKCHAIN
+  };
+}
+
+async function executeCircleTokenTransfer(user, to, amount, tokenConfig) {
+  if (!ENABLE_CIRCLE_WALLETS || !circleWalletsClient) {
+    throw new Error("Circle wallet integration is not enabled");
+  }
+
+  const walletAddress = user.walletAddress || user.address;
+  const blockchain = user.blockchain || CIRCLE_BLOCKCHAIN;
+
+  if (!walletAddress) {
+    throw new Error("User wallet address is not available for Circle transaction");
+  }
+
+  const transferResponse = await circleWalletsClient.createTransaction({
+    idempotencyKey: crypto.randomUUID(),
+    blockchain,
+    walletAddress,
+    tokenAddress: tokenConfig.address,
+    destinationAddress: to,
+    amount: [String(amount)],
+    fee: {
+      type: "level",
+      config: { feeLevel: "MEDIUM" }
+    }
+  });
+
+  const transactionId = transferResponse?.data?.id;
+  if (!transactionId) {
+    throw new Error("Circle transaction creation failed");
+  }
+
+  let transaction;
+  const terminalStates = new Set(["COMPLETE", "FAILED", "CANCELLED", "DENIED"]);
+  const maxPolls = 40;
+  let pollCount = 0;
+
+  while (pollCount < maxPolls) {
+    await sleep(3000);
+    const pollResponse = await circleWalletsClient.getTransaction({ id: transactionId });
+    transaction = pollResponse?.data?.transaction;
+
+    if (!transaction) {
+      pollCount += 1;
+      continue;
+    }
+
+    if (terminalStates.has(transaction.state)) {
+      break;
+    }
+
+    pollCount += 1;
+  }
+
+  if (!transaction || transaction.state !== "COMPLETE") {
+    throw new Error(`Circle transaction failed or did not complete: ${transaction?.state || "unknown"}`);
+  }
+
+  const txHash = transaction.txHash || transaction.transactionHash || "";
+
+  return {
+    status: "ok",
+    settlementState: "final",
+    settlementNetwork: "Arc Testnet",
+    hash: txHash,
+    transactionId,
+    from: walletAddress,
+    to,
+    amount: String(amount),
+    token: tokenConfig.symbol,
+    symbol: tokenConfig.symbol,
+    explorer: buildExplorerUrl(txHash)
+  };
 }
 
 async function syncStoredPaymentLink(store, paymentLink) {
@@ -923,6 +1266,15 @@ async function ensureUserRecord(store, { email, displayName }) {
       existingUser.displayName = displayNameFromEmail(normalizedEmail);
     }
 
+    if (ENABLE_CIRCLE_WALLETS && !existingUser.walletAddress) {
+      const wallet = await createCircleWallet(store);
+      existingUser.walletAddress = wallet.walletAddress;
+      existingUser.walletId = wallet.walletId;
+      existingUser.walletSetId = wallet.walletSetId;
+      existingUser.blockchain = wallet.blockchain;
+      existingUser.address = wallet.walletAddress;
+    }
+
     existingUser.updatedAt = new Date().toISOString();
     store.users[normalizedEmail] = existingUser;
     await savePersistentUser(existingUser);
@@ -939,6 +1291,15 @@ async function ensureUserRecord(store, { email, displayName }) {
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
   };
+
+  if (ENABLE_CIRCLE_WALLETS) {
+    const wallet = await createCircleWallet(store);
+    user.walletAddress = wallet.walletAddress;
+    user.walletId = wallet.walletId;
+    user.walletSetId = wallet.walletSetId;
+    user.blockchain = wallet.blockchain;
+    user.address = wallet.walletAddress;
+  }
 
   store.users[normalizedEmail] = user;
   await savePersistentUser(user);
@@ -1350,7 +1711,18 @@ const allowedOrigins = (process.env.FRONTEND_ORIGIN || "http://localhost:5173,ht
   .filter(Boolean);
 
 const app = express();
-app.use(express.json());
+app.disable("x-powered-by");
+app.use(express.json({
+  verify(req, res, buf) {
+    req.rawBody = buf;
+  }
+}));
+app.use((req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Referrer-Policy", "no-referrer");
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  next();
+});
 app.use(cors({
   origin(origin, callback) {
     if (!origin || allowedOrigins.includes(normalizeOrigin(origin))) {
@@ -1387,18 +1759,107 @@ function getTokenContract(token, runner = provider) {
   return new ethers.Contract(tokenConfig.address, ERC20_ABI, runner);
 }
 
-function mapStoredUser(user) {
+function mapStoredUser(user, options = {}) {
   if (!user) {
     return null;
   }
 
-  return {
+  const mappedUser = {
     email: user.email,
     address: user.address,
+    walletId: user.walletId || null,
     arcKeyId: user.arcKeyId,
     displayName: user.displayName,
-    username: user.username
+    username: user.username,
+    custodyType: user.walletId ? "circle-developer-controlled" : "local-demo",
+    accountType: user.walletId ? "SCA" : "EOA",
+    gasMode: user.walletId && ENABLE_CIRCLE_GAS_STATION ? "sponsored" : "usdc-native",
+    network: "arc-testnet"
   };
+
+  if (options.includeSession) {
+    mappedUser.sessionToken = buildWalletSessionToken({ email: user.email });
+  }
+
+  return mappedUser;
+}
+
+function buildWalletSessionToken({ email }) {
+  const expiresAt = new Date(Date.now() + WALLET_SESSION_TTL_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  const payload = encodeBase64Url(JSON.stringify({
+    email: normalizeEmail(email),
+    expiresAt,
+    purpose: "wallet-session"
+  }));
+
+  return `${payload}.${signValue(payload)}`;
+}
+
+function readWalletSessionToken(token) {
+  const [payload, signature] = String(token || "").split(".");
+
+  if (!payload || !signature || signValue(payload) !== signature) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(decodeBase64Url(payload));
+
+    if (parsed?.purpose !== "wallet-session" || !parsed?.email || !parsed?.expiresAt) {
+      return null;
+    }
+
+    if (new Date(parsed.expiresAt).getTime() <= Date.now()) {
+      return null;
+    }
+
+    return {
+      email: normalizeEmail(parsed.email),
+      expiresAt: String(parsed.expiresAt)
+    };
+  } catch {
+    return null;
+  }
+}
+
+function parseCookieHeader(cookieHeader) {
+  return String(cookieHeader || "")
+    .split(";")
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .reduce((cookies, entry) => {
+      const [name, ...valueParts] = entry.split("=");
+      cookies[name] = decodeURIComponent(valueParts.join("=") || "");
+      return cookies;
+    }, {});
+}
+
+function getWalletSessionTokenFromRequest(req) {
+  const cookies = parseCookieHeader(req.headers.cookie);
+  return (
+    req.headers["x-veloxpay-session"]
+    || req.body?.walletSessionToken
+    || req.query?.walletSessionToken
+    || cookies.veloxpay_wallet_session
+    || ""
+  );
+}
+
+function requireWalletSession(req, email) {
+  if (!REQUIRE_WALLET_SESSION) {
+    return null;
+  }
+
+  const session = readWalletSessionToken(getWalletSessionTokenFromRequest(req));
+  const normalizedEmail = normalizeEmail(email);
+
+  if (!session || session.email !== normalizedEmail) {
+    const error = new Error("Wallet session expired. Please sign in again.");
+    error.statusCode = 401;
+    throw error;
+  }
+
+  return session;
 }
 
 async function resolveOwnerIdentity(store, { email, displayName } = {}) {
@@ -1434,6 +1895,48 @@ async function fetchAllTokenBalances(address) {
   return Object.fromEntries(entries);
 }
 
+async function simulateTokenTransfer({ from, to, amount, token }) {
+  const tokenConfig = getTokenConfig(token);
+
+  if (!tokenConfig) {
+    throw new Error(buildTokenError());
+  }
+
+  if (!ethers.isAddress(from) || !ethers.isAddress(to)) {
+    throw new Error("Valid from and recipient addresses are required");
+  }
+
+  assertPositiveAmount(amount);
+
+  const tokenContract = getTokenContract(tokenConfig.symbol);
+  const [rawTokenBalance, decimals, nativeBalance, feeData] = await Promise.all([
+    tokenContract.balanceOf(from),
+    tokenContract.decimals(),
+    provider.getBalance(from),
+    provider.getFeeData()
+  ]);
+  const value = ethers.parseUnits(String(amount || "0"), decimals);
+  const gasLimit = BigInt(100000);
+  const gasPrice = feeData.gasPrice || BigInt(0);
+  const estimatedNetworkFee = gasLimit * gasPrice;
+
+  return {
+    status: rawTokenBalance >= value && nativeBalance >= estimatedNetworkFee ? "ready" : "blocked",
+    token: tokenConfig.symbol,
+    amount: String(amount || "0"),
+    from,
+    to,
+    hasEnoughToken: rawTokenBalance >= value,
+    hasEnoughGas: nativeBalance >= estimatedNetworkFee,
+    balance: ethers.formatUnits(rawTokenBalance, decimals),
+    estimatedGasLimit: gasLimit.toString(),
+    estimatedGasPrice: gasPrice.toString(),
+    estimatedNetworkFee: ethers.formatUnits(estimatedNetworkFee, 18),
+    gasToken: "USDC",
+    finality: "single Arc confirmation is final"
+  };
+}
+
 async function executeTokenTransfer({ to, amount, email, token }) {
   const tokenConfig = getTokenConfig(token);
 
@@ -1445,13 +1948,25 @@ async function executeTokenTransfer({ to, amount, email, token }) {
     throw new Error("Missing required fields: to, amount, email, token");
   }
 
+  assertPositiveAmount(amount);
+
+  const store = readStore();
+  const user = await getStoredUser(store, email) || { email };
+
   const { signer } = walletFromEmail(email);
-  const signerAddress = await signer.getAddress();
+  const signerAddress = user.walletAddress || (await signer.getAddress());
 
   if (!ethers.isAddress(to)) {
     throw new Error("Invalid recipient address");
   }
 
+  // If Circle developer-controlled wallets are enabled and the user has a Circle wallet,
+  // route the transfer through Circle's wallets API which handles gas and signing.
+  if (ENABLE_CIRCLE_WALLETS && user && user.walletAddress) {
+    return executeCircleTokenTransfer(user, to, amount, tokenConfig);
+  }
+
+  // Fallback: local signer using ethers (existing behavior)
   const tokenContract = getTokenContract(tokenConfig.symbol, signer);
   const [rawTokenBalance, decimals, nativeBalance, feeData] = await Promise.all([
     tokenContract.balanceOf(signerAddress),
@@ -1479,7 +1994,7 @@ async function executeTokenTransfer({ to, amount, email, token }) {
 
   if (nativeBalance < estimatedGasCost) {
     throw new Error(
-      `Insufficient ARC for gas. Have ${ethers.formatUnits(nativeBalance, 18)} ARC, need about ${ethers.formatUnits(estimatedGasCost, 18)} ARC.`
+      `Insufficient USDC for Arc network fees. Have ${ethers.formatUnits(nativeBalance, 18)} USDC available for gas, need about ${ethers.formatUnits(estimatedGasCost, 18)} USDC.`
     );
   }
 
@@ -1493,6 +2008,8 @@ async function executeTokenTransfer({ to, amount, email, token }) {
 
   return {
     status: "ok",
+    settlementState: "final",
+    settlementNetwork: "Arc Testnet",
     hash: transactionHash,
     from: signerAddress,
     to,
@@ -1558,12 +2075,55 @@ app.get("/health", (req, res) => {
   res.json({ status: "ok", message: "Arc Wallet Backend is running" });
 });
 
+app.get("/features", (req, res) => {
+  res.json(buildFeatureCapabilities());
+});
+
+app.get("/readiness", (req, res) => {
+  const report = buildReadinessReport();
+  res.status(report.status === "ready" ? 200 : 503).json(report);
+});
+
+app.get("/arc/fee-quote", async (req, res) => {
+  try {
+    const feeData = await provider.getFeeData();
+    const gasPrice = feeData.gasPrice || BigInt(0);
+    const gasLimit = BigInt(req.query.gasLimit || 100000);
+    const estimatedNetworkFee = gasLimit * gasPrice;
+
+    res.json({
+      network: "Arc Testnet",
+      gasToken: "USDC",
+      gasPrice: gasPrice.toString(),
+      gasLimit: gasLimit.toString(),
+      estimatedNetworkFee: ethers.formatUnits(estimatedNetworkFee, 18),
+      finality: "deterministic-sub-second"
+    });
+  } catch (err) {
+    console.error("Fee quote error:", err);
+    res.status(err.statusCode || 500).json({ error: err.message });
+  }
+});
+
+app.get("/webhooks/circle/status", (req, res) => {
+  res.json({
+    status: "ok",
+    webhookVerification: ENABLE_CIRCLE_WEBHOOK_VERIFICATION,
+    circleApiUrl: CIRCLE_API_URL,
+    requiredHeaders: ["X-Circle-Signature", "X-Circle-Key-Id"],
+    note: ENABLE_CIRCLE_WEBHOOK_VERIFICATION
+      ? "Signature verification is enabled."
+      : "Signature verification is disabled. Set CIRCLE_API_KEY to enable it."
+  });
+});
+
 app.post("/auth/send-code", async (req, res) => {
   try {
     const { email, displayName } = req.body;
     if (!email) return res.status(400).json({ error: "Email required" });
 
     const normalizedEmail = normalizeEmail(email);
+    enforceRateLimit(`wallet-login:${normalizedEmail}:${req.ip}`, { limit: 5, windowMs: 15 * 60 * 1000 });
     const code = generateOtpCode();
     const expiresAt = new Date(Date.now() + OTP_CODE_TTL_MINUTES * 60 * 1000).toISOString();
     const challengeId = buildWalletLoginChallengeToken({
@@ -1586,7 +2146,7 @@ app.post("/auth/send-code", async (req, res) => {
     });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: err.message });
   }
 });
 
@@ -1627,13 +2187,13 @@ app.post("/auth/verify-code", async (req, res) => {
     writeStore(store);
 
     res.json({
-      ...mapStoredUser(user),
+      ...mapStoredUser(user, { includeSession: true }),
       balances,
       network: "arc-testnet"
     });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: err.message });
   }
 });
 
@@ -1659,7 +2219,7 @@ app.get("/users/profile", async (req, res) => {
     res.json(mapStoredUser(user));
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: err.message });
   }
 });
 
@@ -1671,6 +2231,7 @@ app.post("/users/profile", async (req, res) => {
       return res.status(400).json({ error: "Email required" });
     }
 
+    requireWalletSession(req, email);
     const store = readStore();
     const user = await ensureUserRecord(store, { email, displayName });
     writeStore(store);
@@ -1678,7 +2239,7 @@ app.post("/users/profile", async (req, res) => {
     res.json(mapStoredUser(user));
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: err.message });
   }
 });
 
@@ -1691,7 +2252,7 @@ app.get("/balance", async (req, res) => {
     res.json({ ...tokenBalance, address });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: err.message });
   }
 });
 
@@ -1704,7 +2265,7 @@ app.get("/balances", async (req, res) => {
     res.json({ address, balances });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: err.message });
   }
 });
 
@@ -1732,12 +2293,13 @@ app.get("/txs", async (req, res) => {
     res.json({ txs, address });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: err.message });
   }
 });
 
 app.post("/send-transaction", async (req, res) => {
   try {
+    requireWalletSession(req, req.body?.email);
     const transfer = await executeTokenTransfer(req.body);
     const store = readStore();
 
@@ -1757,7 +2319,201 @@ app.post("/send-transaction", async (req, res) => {
     res.json(transfer);
   } catch (err) {
     console.error("Send transaction error:", err);
-    res.status(500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: err.message });
+  }
+});
+
+app.post("/transactions/simulate", async (req, res) => {
+  try {
+    const { to, amount, email, token } = req.body || {};
+    requireWalletSession(req, email);
+    const store = readStore();
+    const user = await getStoredUser(store, email);
+    const { signer } = walletFromEmail(email);
+    const from = user?.walletAddress || user?.address || await signer.getAddress();
+    const simulation = await simulateTokenTransfer({ from, to, amount, token });
+
+    res.json(simulation);
+  } catch (err) {
+    console.error("Transaction simulation error:", err);
+    res.status(err.statusCode || 500).json({ error: err.message });
+  }
+});
+
+app.post("/batch-transfers", async (req, res) => {
+  try {
+    const { email, transfers } = req.body || {};
+
+    if (!email || !Array.isArray(transfers) || transfers.length === 0) {
+      return res.status(400).json({ error: "Email and at least one transfer are required" });
+    }
+
+    requireWalletSession(req, email);
+
+    if (transfers.length > 25) {
+      return res.status(400).json({ error: "Batch transfers are limited to 25 recipients for now" });
+    }
+
+    transfers.forEach((entry, index) => {
+      if (!ethers.isAddress(entry.to)) {
+        throw new Error(`Transfer ${index + 1} has an invalid recipient address`);
+      }
+
+      assertPositiveAmount(entry.amount, `Transfer ${index + 1} amount`);
+    });
+
+    const results = [];
+    const store = readStore();
+
+    for (const entry of transfers) {
+      const transfer = await executeTokenTransfer({
+        email,
+        to: entry.to,
+        amount: entry.amount,
+        token: entry.token || "USDC"
+      });
+
+      store.txs.unshift({
+        hash: transfer.hash,
+        from: transfer.from,
+        to: transfer.to,
+        amount: transfer.amount,
+        symbol: transfer.symbol,
+        token: transfer.token,
+        status: "confirmed",
+        explorer: transfer.explorer,
+        timestamp: new Date().toISOString(),
+        batch: true
+      });
+      results.push(transfer);
+    }
+
+    writeStore(store);
+    res.json({
+      status: "completed",
+      count: results.length,
+      settlementNetwork: "Arc Testnet",
+      settlementState: "final",
+      results
+    });
+  } catch (err) {
+    console.error("Batch transfer error:", err);
+    res.status(err.statusCode || 500).json({ error: err.message });
+  }
+});
+
+app.post("/create-wallet", async (req, res) => {
+  try {
+    if (!ENABLE_CIRCLE_WALLETS) {
+      return res.status(400).json({ error: "Circle wallets not configured" });
+    }
+
+    const { email } = req.body || {};
+    if (!email) {
+      return res.status(400).json({ error: "Email required" });
+    }
+
+    requireWalletSession(req, email);
+    const store = readStore();
+    const user = await ensureUserRecord(store, { email });
+
+    if (user.walletAddress) {
+      return res.json(mapStoredUser(user));
+    }
+
+    const wallet = await createCircleWallet(store);
+    user.walletAddress = wallet.walletAddress;
+    user.walletId = wallet.walletId;
+    user.walletSetId = wallet.walletSetId;
+    user.blockchain = wallet.blockchain;
+    user.address = wallet.walletAddress;
+    store.users[normalizeEmail(email)] = user;
+    writeStore(store);
+
+    res.json(mapStoredUser(user));
+  } catch (err) {
+    console.error("Create wallet error:", err);
+    res.status(err.statusCode || 500).json({ error: err.message });
+  }
+});
+
+app.get("/wallet/custody-options", (req, res) => {
+  res.json({
+    default: ENABLE_CIRCLE_WALLETS ? "developer-controlled" : "local-demo",
+    options: [
+      {
+        id: "developer-controlled",
+        label: "Circle Developer-Controlled Wallet",
+        enabled: ENABLE_CIRCLE_WALLETS,
+        bestFor: "Invisible wallet UX, payment links, automated payouts, and merchant flows.",
+        custody: "Application-managed with Circle Wallets infrastructure.",
+        gasMode: ENABLE_CIRCLE_GAS_STATION ? "Circle Gas Station sponsored gas" : "Arc USDC-native gas"
+      },
+      {
+        id: "user-controlled",
+        label: "Circle User-Controlled Wallet",
+        enabled: ENABLE_USER_CONTROLLED_WALLETS,
+        bestFor: "Users who want direct approval, social/email wallet auth, and stronger self-custody semantics.",
+        custody: "User-controlled through Circle SDK configuration.",
+        setupRequired: ENABLE_USER_CONTROLLED_WALLETS ? "" : "Set CIRCLE_USER_CONTROLLED_APP_ID and add the Circle user-controlled wallet SDK flow."
+      }
+    ]
+  });
+});
+
+app.post("/wallets/user-controlled/session", (req, res) => {
+  const email = normalizeEmail(req.body?.email);
+
+  if (!email) {
+    return res.status(400).json({ error: "Email required" });
+  }
+
+  requireWalletSession(req, email);
+
+  if (!ENABLE_USER_CONTROLLED_WALLETS) {
+    return res.status(202).json(buildUnavailableFeature(
+      "Circle User-Controlled Wallets",
+      "CIRCLE_USER_CONTROLLED_APP_ID and the Circle Web SDK client flow"
+    ));
+  }
+
+  res.json({
+    status: "ready",
+    appId: process.env.CIRCLE_USER_CONTROLLED_APP_ID,
+    userId: crypto.createHash("sha256").update(email).digest("hex"),
+    email,
+    nextStep: "Initialize the Circle user-controlled wallet SDK on the client with this app ID and user ID."
+  });
+});
+
+// Circle webhook receiver for real-time transaction updates
+app.post("/webhooks/circle", async (req, res) => {
+  try {
+    if (ENABLE_CIRCLE_WEBHOOK_VERIFICATION) {
+      await verifyCircleWebhookSignature(req);
+    }
+
+    const payload = req.body || {};
+    const store = readStore();
+
+    const tx = payload?.data?.transaction || payload?.data || payload;
+    const txHash = tx?.txHash || tx?.transactionHash || tx?.tx_hash || tx?.hash || tx?.id || null;
+    const state = tx?.state || payload?.type || "updated";
+
+    if (txHash) {
+      const idx = store.txs.findIndex((t) => t.hash === txHash || t.hash === tx?.id);
+      if (idx >= 0) {
+        store.txs[idx].status = state;
+        store.txs[idx].rawWebhook = payload;
+        writeStore(store);
+      }
+    }
+
+    console.log("Circle webhook received:", payload?.type || txHash || "(no-id)");
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("Webhook error:", err);
+    res.status(err.statusCode || 500).json({ error: err.message });
   }
 });
 
@@ -1781,7 +2537,7 @@ app.get("/payment-links", async (req, res) => {
     res.json(paymentLinks);
   } catch (err) {
     console.error("List payment links error:", err);
-    res.status(500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: err.message });
   }
 });
 
@@ -1815,7 +2571,7 @@ app.get("/payment-links/resolve", async (req, res) => {
     res.json(paymentLink);
   } catch (err) {
     console.error("Resolve payment link error:", err);
-    res.status(500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: err.message });
   }
 });
 
@@ -1836,6 +2592,8 @@ app.post("/payment-links", async (req, res) => {
     if (!tokenConfig) {
       return res.status(400).json({ error: buildTokenError() });
     }
+
+    requireWalletSession(req, ownerEmail);
 
     const store = readStore();
     const owner = await resolveOwnerIdentity(store, { email: ownerEmail, displayName: ownerName });
@@ -1880,7 +2638,39 @@ app.post("/payment-links", async (req, res) => {
     res.status(201).json(paymentLink);
   } catch (err) {
     console.error("Create payment link error:", err);
-    res.status(500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: err.message });
+  }
+});
+
+app.get("/payment-links/recurring", async (req, res) => {
+  try {
+    const ownerEmail = normalizeEmail(req.query.ownerEmail);
+
+    if (ownerEmail) {
+      requireWalletSession(req, ownerEmail);
+    }
+
+    const store = readStore();
+    const links = mergeUniqueByKey(
+      ownerEmail ? await listPersistentPaymentLinks(ownerEmail) : [],
+      store.paymentLinks,
+      (link) => link.linkCode || link.id
+    )
+      .filter((link) => !ownerEmail || link.ownerEmail === ownerEmail)
+      .filter((link) => link.recurrence?.interval && link.recurrence.interval !== "one-time")
+      .map((link) => {
+        hydratePaymentLinkAccess(link);
+        return {
+          ...link,
+          url: buildPaymentLinkUrl(link),
+          nextDueAt: link.recurrence?.nextDueAt || ""
+        };
+      });
+
+    res.json(links);
+  } catch (err) {
+    console.error("Recurring links error:", err);
+    res.status(err.statusCode || 500).json({ error: err.message });
   }
 });
 
@@ -1901,11 +2691,13 @@ app.get("/payments", async (req, res) => {
       return res.json(storedPayments);
     }
 
+    const owner = await getStoredUser(store, ownerEmail);
     const { signer } = walletFromEmail(ownerEmail);
+    const ownerAddress = owner?.walletAddress || owner?.address || signer.address;
     let onchainIncoming = [];
 
     try {
-      onchainIncoming = (await fetchTokenTransferHistory(signer.address, { direction: "incoming" }))
+      onchainIncoming = (await fetchTokenTransferHistory(ownerAddress, { direction: "incoming" }))
         .map((tx) => ({
           id: tx.id,
           linkId: tx.hash,
@@ -1930,7 +2722,7 @@ app.get("/payments", async (req, res) => {
     res.json(payments);
   } catch (err) {
     console.error("List payments error:", err);
-    res.status(500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: err.message });
   }
 });
 
@@ -1953,7 +2745,7 @@ app.get("/payments/:paymentId", async (req, res) => {
     res.json(mapStoredPayment(payment));
   } catch (err) {
     console.error("Get payment error:", err);
-    res.status(500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: err.message });
   }
 });
 
@@ -1965,6 +2757,7 @@ app.get("/customers", async (req, res) => {
       return res.status(400).json({ error: "Owner email required" });
     }
 
+    requireWalletSession(req, ownerEmail);
     const store = readStore();
     const localCustomers = (Array.isArray(store.customers) ? store.customers : [])
       .filter((customer) => normalizeEmail(customer.ownerEmail) === ownerEmail)
@@ -1980,7 +2773,255 @@ app.get("/customers", async (req, res) => {
     res.json(customers);
   } catch (err) {
     console.error("List customers error:", err);
-    res.status(500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: err.message });
+  }
+});
+
+app.get("/unified-balance", async (req, res) => {
+  try {
+    const address = String(req.query.address || "").trim();
+
+    if (!address || !ethers.isAddress(address)) {
+      return res.status(400).json({ error: "Valid wallet address required" });
+    }
+
+    const arcBalances = await fetchAllTokenBalances(address);
+    let appKitBalance = null;
+
+    if (ENABLE_ARC_APP_KIT && req.query.useAppKit === "true") {
+      try {
+        appKitBalance = await getUnifiedBalanceWithCircleWallets({
+          apiKey: CIRCLE_API_KEY,
+          entitySecret: CIRCLE_ENTITY_SECRET,
+          baseUrl: CIRCLE_API_URL,
+          chain: "Arc_Testnet",
+          address,
+          token: "USDC"
+        });
+      } catch (appKitError) {
+        appKitBalance = {
+          status: "app_kit_error",
+          message: appKitError.message
+        };
+      }
+    }
+
+    res.json({
+      status: appKitBalance ? "app_kit_checked" : ENABLE_ARC_APP_KIT ? "ready_for_app_kit" : "local_arc_only",
+      address,
+      totalConfirmedBalance: arcBalances.USDC?.balance || "0",
+      token: "USDC",
+      appKitBalance,
+      sources: [
+        {
+          chain: "Arc Testnet",
+          balance: arcBalances.USDC?.balance || "0",
+          status: "confirmed"
+        }
+      ],
+      message: ENABLE_ARC_APP_KIT
+        ? "Arc App Kit can extend this into a chain-agnostic USDC balance across supported chains."
+        : "Set ARC_APP_KIT_KEY or Circle App Kit configuration to enable cross-chain Unified Balance."
+    });
+  } catch (err) {
+    console.error("Unified balance error:", err);
+    res.status(err.statusCode || 500).json({ error: err.message });
+  }
+});
+
+app.post("/bridge/quote", (req, res) => {
+  const { fromChain = "Base Sepolia", toChain = "Arc Testnet", amount = "0", token = "USDC" } = req.body || {};
+
+  if (normalizeToken(token) !== "USDC") {
+    return res.status(400).json({ error: "Arc App Kit bridge currently supports USDC for this VeloxPay flow" });
+  }
+
+  res.json({
+    status: ENABLE_ARC_APP_KIT ? "ready_for_app_kit" : "configuration_required",
+    fromChain,
+    toChain,
+    amount: String(amount),
+    token: "USDC",
+    estimatedDuration: "seconds to minutes depending on route",
+    route: `${fromChain} -> ${toChain}`,
+    message: ENABLE_ARC_APP_KIT
+      ? "Use Arc App Kit Bridge with the Circle Wallets adapter to execute this quote."
+      : "Install/configure Arc App Kit and an adapter to execute bridge transfers."
+  });
+});
+
+app.post("/bridge", async (req, res) => {
+  const {
+    fromChain = "Base_Sepolia",
+    toChain = "Arc_Testnet",
+    fromAddress,
+    toAddress,
+    amount = "0",
+    token = "USDC",
+    execute = false
+  } = req.body || {};
+
+  if (!ENABLE_ARC_APP_KIT) {
+    return res.status(202).json(buildUnavailableFeature("Arc App Kit Bridge", "Arc App Kit packages and adapter configuration"));
+  }
+
+  if (normalizeToken(token) !== "USDC") {
+    return res.status(400).json({ error: "Arc App Kit bridge currently supports USDC for this VeloxPay flow" });
+  }
+
+  if (!execute) {
+    return res.status(202).json({
+      status: "ready_for_execution",
+      fromChain,
+      toChain,
+      amount: String(amount),
+      token: "USDC",
+      nextStep: "Send execute=true with source and destination Circle wallet addresses when you are ready to run the bridge."
+    });
+  }
+
+  if (!fromAddress || !toAddress) {
+    return res.status(400).json({ error: "fromAddress and toAddress are required for bridge execution" });
+  }
+
+  assertPositiveAmount(amount);
+
+  try {
+    const result = await executeBridgeWithCircleWallets({
+      apiKey: CIRCLE_API_KEY,
+      entitySecret: CIRCLE_ENTITY_SECRET,
+      baseUrl: CIRCLE_API_URL,
+      fromChain,
+      toChain,
+      fromAddress,
+      toAddress,
+      amount: String(amount)
+    });
+
+    return res.json({
+      status: "submitted",
+      feature: "Arc App Kit Bridge",
+      result
+    });
+  } catch (err) {
+    console.error("Bridge execution error:", err);
+    return res.status(err.statusCode || 500).json({ error: err.message });
+  }
+});
+
+app.post("/bridge/prepare", (req, res) => {
+  const { fromChain = "Base_Sepolia", toChain = "Arc_Testnet", amount = "0", token = "USDC" } = req.body || {};
+
+  res.status(202).json({
+    status: "ready_for_execution",
+    fromChain,
+    toChain,
+    amount: String(amount),
+    token: normalizeToken(token),
+    nextStep: "Execute with AppKit.bridge using the Circle Wallets adapter for the selected wallets."
+  });
+});
+
+app.post("/swaps/quote", (req, res) => {
+  const { fromToken = "EURC", toToken = "USDC", amount = "0", chain = "Arc Testnet" } = req.body || {};
+  const source = normalizeToken(fromToken);
+  const destination = normalizeToken(toToken);
+
+  if (!getTokenConfig(source) || !getTokenConfig(destination)) {
+    return res.status(400).json({ error: buildTokenError() });
+  }
+
+  res.json({
+    status: ENABLE_ARC_APP_KIT ? "ready_for_app_kit" : "configuration_required",
+    chain,
+    fromToken: source,
+    toToken: destination,
+    amount: String(amount),
+    message: ENABLE_ARC_APP_KIT
+      ? "Use Arc App Kit Swap to fetch a live executable quote."
+      : "Set up Arc App Kit Swap configuration before live quotes are available."
+  });
+});
+
+app.post("/swaps", (req, res) => {
+  if (!ENABLE_ARC_APP_KIT) {
+    return res.status(202).json(buildUnavailableFeature("Arc App Kit Swap", "Arc App Kit swap configuration and a Circle Console kit key"));
+  }
+
+  const {
+    chain = "Arc_Testnet",
+    address,
+    fromToken = "EURC",
+    toToken = "USDC",
+    amount = "0",
+    execute = false
+  } = req.body || {};
+
+  if (!execute) {
+    return res.status(202).json({
+      status: "ready_for_execution",
+      request: req.body || {},
+      nextStep: "Send execute=true with the Circle wallet address when you are ready to run the swap."
+    });
+  }
+
+  if (!address) {
+    return res.status(400).json({ error: "Circle wallet address is required for swap execution" });
+  }
+
+  assertPositiveAmount(amount);
+
+  executeSwapWithCircleWallets({
+    apiKey: CIRCLE_API_KEY,
+    entitySecret: CIRCLE_ENTITY_SECRET,
+    baseUrl: CIRCLE_API_URL,
+    kitKey: ARC_APP_KIT_KEY,
+    chain,
+    address,
+    tokenIn: normalizeToken(fromToken),
+    tokenOut: normalizeToken(toToken),
+    amountIn: String(amount)
+  })
+    .then((result) => res.json({ status: "submitted", feature: "Arc App Kit Swap", result }))
+    .catch((err) => {
+      console.error("Swap execution error:", err);
+      res.status(err.statusCode || 500).json({ error: err.message });
+    });
+});
+
+app.get("/payments/settlement-report", async (req, res) => {
+  try {
+    const ownerEmail = normalizeEmail(req.query.ownerEmail);
+
+    if (ownerEmail) {
+      requireWalletSession(req, ownerEmail);
+    }
+
+    const store = readStore();
+    const payments = mergeUniqueByKey(
+      ownerEmail ? await listPersistentPayments(ownerEmail) : [],
+      store.payments,
+      (payment) => payment.id
+    ).filter((payment) => !ownerEmail || payment.ownerEmail === ownerEmail);
+    const completed = payments.filter((payment) => payment.status === "completed");
+    const totals = completed.reduce((acc, payment) => {
+      const currency = normalizeToken(payment.currency);
+      acc[currency] = (acc[currency] || 0) + Number(payment.amount || 0);
+      return acc;
+    }, {});
+
+    res.json({
+      ownerEmail,
+      settlementNetwork: "Arc Testnet",
+      finality: "deterministic-sub-second",
+      completedPayments: completed.length,
+      failedPayments: payments.filter((payment) => payment.status === "failed").length,
+      totals,
+      generatedAt: new Date().toISOString()
+    });
+  } catch (err) {
+    console.error("Settlement report error:", err);
+    res.status(err.statusCode || 500).json({ error: err.message });
   }
 });
 
@@ -2008,6 +3049,7 @@ app.post("/payment-links/:linkId/send-code", async (req, res) => {
       return res.status(400).json({ error: "Payer email is required" });
     }
 
+    enforceRateLimit(`payment-code:${linkId}:${payerEmail}:${req.ip}`, { limit: 5, windowMs: 15 * 60 * 1000 });
     hydratePaymentLinkAccess(paymentLink);
     const code = generateOtpCode();
     const expiresAt = new Date(Date.now() + OTP_CODE_TTL_MINUTES * 60 * 1000).toISOString();
@@ -2037,7 +3079,7 @@ app.post("/payment-links/:linkId/send-code", async (req, res) => {
     });
   } catch (err) {
     console.error("Send verification code error:", err);
-    res.status(500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: err.message });
   }
 });
 
@@ -2178,7 +3220,7 @@ app.post("/payment-links/:linkId/confirm-payment", async (req, res) => {
     writeStore(store);
 
     console.error("Payment link confirm error:", err);
-    res.status(500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: err.message });
   }
 });
 

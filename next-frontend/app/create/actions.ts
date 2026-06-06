@@ -18,6 +18,7 @@ export async function createPaymentLinkAction(
   const description = String(formData.get("description") || "").trim();
   const ownerEmail = String(formData.get("ownerEmail") || "").trim();
   const ownerName = String(formData.get("ownerName") || "").trim();
+  const walletSessionToken = String(formData.get("walletSessionToken") || "").trim();
   const currency = String(formData.get("currency") || "USDC").trim().toUpperCase();
   const recurrence = String(formData.get("recurrence") || "one-time").trim();
   const customerEmail = String(formData.get("customerEmail") || "").trim();
@@ -50,6 +51,7 @@ export async function createPaymentLinkAction(
       description: description || undefined,
       ownerEmail,
       ownerName: ownerName || undefined,
+      walletSessionToken: walletSessionToken || undefined,
       currency,
       recurrence,
       customerEmail: customerEmail || undefined,

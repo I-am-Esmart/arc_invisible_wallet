@@ -263,6 +263,7 @@ export function useVeloxPayData(options: Options = {}) {
         ...payload,
         email: walletUser.email,
         arcKeyId: walletUser.arcKeyId,
+        walletSessionToken: walletUser.sessionToken,
       });
 
       await refreshData(walletUser);

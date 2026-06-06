@@ -63,6 +63,9 @@ export default function WalletPage() {
           <Button asChild>
             <Link href="/wallet/send">Send</Link>
           </Button>
+          <Button asChild variant="secondary">
+            <Link href="/features">Arc features</Link>
+          </Button>
         </div>
       </section>
 
@@ -88,6 +91,15 @@ export default function WalletPage() {
           <div className="mt-2 text-3xl font-semibold text-slate-950">
             {loading ? "..." : formatBalance(balances.EURC?.balance || "0")} EURC
           </div>
+        </Card>
+        <Card>
+          <div className="text-sm text-slate-500">Wallet rail</div>
+          <div className="mt-2 text-2xl font-semibold text-slate-950">
+            {walletUser.custodyType === "circle-developer-controlled" ? "Circle SCA" : "Demo EOA"}
+          </div>
+          <p className="mt-2 text-sm text-slate-600">
+            {walletUser.gasMode === "sponsored" ? "Gas sponsored with Circle Gas Station." : "Arc fees are paid in USDC."}
+          </p>
         </Card>
         <Card className="bg-slate-950 text-white">
           <div className="text-sm text-white/60">Wallet address</div>

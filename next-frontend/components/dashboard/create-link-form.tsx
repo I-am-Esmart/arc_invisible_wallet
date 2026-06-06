@@ -145,6 +145,7 @@ export function CreateLinkForm({
       <form action={formAction} className="mt-6 space-y-5">
         <input name="ownerEmail" type="hidden" value={ownerEmail} />
         <input name="ownerName" type="hidden" value={ownerName} />
+        <input name="walletSessionToken" type="hidden" value={walletUser?.sessionToken || ""} />
 
         {walletUser?.email ? (
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">

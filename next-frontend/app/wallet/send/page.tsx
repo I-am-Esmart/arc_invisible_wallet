@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { WalletRequiredState } from "@/components/wallet/wallet-required-state";
 import { useVeloxPayData } from "@/components/wallet/use-veloxpay-data";
+import { simulateTransaction } from "@/lib/api/features";
+import type { FeatureStatus } from "@/lib/types/features";
 
 const TOKEN_OPTIONS = [
   { value: "USDC", label: "USDC" },
@@ -21,6 +23,7 @@ export default function WalletSendPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [explorerUrl, setExplorerUrl] = useState("");
+  const [simulation, setSimulation] = useState<FeatureStatus | null>(null);
 
   if (!walletUser) {
     return <WalletRequiredState />;
@@ -43,6 +46,27 @@ export default function WalletSendPage() {
       setError(sendError instanceof Error ? sendError.message : "Unable to send transaction.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleSimulate() {
+    if (!walletUser) {
+      return;
+    }
+
+    setError("");
+    setSimulation(null);
+
+    try {
+      const result = await simulateTransaction({
+        email: walletUser.email,
+        to,
+        amount,
+        token,
+      });
+      setSimulation(result);
+    } catch (simulateError) {
+      setError(simulateError instanceof Error ? simulateError.message : "Unable to simulate transaction.");
     }
   }
 
@@ -113,9 +137,26 @@ export default function WalletSendPage() {
             </div>
           ) : null}
 
-          <Button type="submit" className="w-full py-3 text-base" disabled={loading}>
-            {loading ? "Sending..." : `Send ${token}`}
-          </Button>
+          {simulation ? (
+            <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-700">
+              <div className="font-semibold text-slate-900">Arc transaction preview</div>
+              <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                <p>Status: {String(simulation.status || "unknown")}</p>
+                <p>Gas token: {String(simulation.gasToken || "USDC")}</p>
+                <p>Estimated network fee: {String(simulation.estimatedNetworkFee || "-")} USDC</p>
+                <p>Finality: {String(simulation.finality || "single confirmation")}</p>
+              </div>
+            </div>
+          ) : null}
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Button type="button" variant="secondary" className="py-3 text-base" disabled={loading || !to || !amount} onClick={handleSimulate}>
+              Preview fees
+            </Button>
+            <Button type="submit" className="py-3 text-base" disabled={loading}>
+              {loading ? "Sending..." : `Send ${token}`}
+            </Button>
+          </div>
         </form>
       </Card>
     </main>
