@@ -17,6 +17,8 @@ export type FeatureCapabilities = {
     receipts: boolean;
     recurringRequests: boolean;
     batchTransfers: boolean;
+    nativeBatchTransfers: boolean;
+    transactionMemos: boolean;
     simulation: boolean;
     settlementReports: boolean;
   };

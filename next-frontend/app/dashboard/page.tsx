@@ -38,7 +38,7 @@ export default function DashboardPage() {
 
       {(errors.balances || errors.links || errors.payments) ? (
         <Card className="border border-amber-200 bg-amber-50">
-          <h2 className="text-lg font-semibold text-amber-900">Some data is still loading</h2>
+          <h2 className="text-lg font-semibold text-amber-900">Some data could not be loaded</h2>
           <div className="mt-2 space-y-1 text-sm text-amber-800">
             {errors.balances ? <p>{errors.balances}</p> : null}
             {errors.links ? <p>{errors.links}</p> : null}

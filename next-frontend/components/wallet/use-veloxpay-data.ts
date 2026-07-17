@@ -63,7 +63,12 @@ export function useVeloxPayData(options: Options = {}) {
     if (includeBalances) {
       tasks.push(
         fetchWalletBalances(user.address)
-          .then((result) => setBalances(result.balances || {}))
+          .then((result) => {
+            setBalances(result.balances || {});
+            if (result.warnings && Object.keys(result.warnings).length > 0) {
+              nextErrors.balances = `Some token balances are temporarily unavailable: ${Object.keys(result.warnings).join(", ")}.`;
+            }
+          })
           .catch((error) => {
             nextErrors.balances =
               error instanceof Error ? error.message : "Unable to load balances.";
@@ -177,7 +182,12 @@ export function useVeloxPayData(options: Options = {}) {
       try {
         const result = await fetchWalletBalances(walletUser.address);
         setBalances(result.balances || {});
-        setErrors((current) => ({ ...current, balances: "" }));
+        setErrors((current) => ({
+          ...current,
+          balances: result.warnings && Object.keys(result.warnings).length > 0
+            ? `Some token balances are temporarily unavailable: ${Object.keys(result.warnings).join(", ")}.`
+            : "",
+        }));
       } catch (error) {
         setErrors((current) => ({
           ...current,
@@ -254,6 +264,7 @@ export function useVeloxPayData(options: Options = {}) {
       to: string;
       amount: string;
       token: string;
+      memo?: string;
     }) => {
       if (!walletUser) {
         throw new Error("Wallet not found.");

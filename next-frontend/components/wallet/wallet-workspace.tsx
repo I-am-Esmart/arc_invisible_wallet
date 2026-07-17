@@ -59,6 +59,7 @@ export function WalletWorkspace() {
   const [sendSuccess, setSendSuccess] = useState("");
   const [recipientAddress, setRecipientAddress] = useState("");
   const [amount, setAmount] = useState("");
+  const [sendMemo, setSendMemo] = useState("");
   const [token, setToken] = useState<(typeof TOKEN_OPTIONS)[number]["value"]>("USDC");
   const [sending, setSending] = useState(false);
   const [copiedAddress, setCopiedAddress] = useState(false);
@@ -124,13 +125,16 @@ export function WalletWorkspace() {
         to: recipientAddress,
         amount,
         token,
+        memo: sendMemo,
         email: walletUser.email,
         arcKeyId: walletUser.arcKeyId,
+        walletSessionToken: walletUser.sessionToken,
       });
 
       setSendSuccess(`Sent ${response.amount} ${response.symbol}.`);
       setRecipientAddress("");
       setAmount("");
+      setSendMemo("");
       await refreshWorkspace(walletUser);
     } catch (sendTxError) {
       setSendError(sendTxError instanceof Error ? sendTxError.message : "Unable to send payment.");
@@ -290,6 +294,17 @@ export function WalletWorkspace() {
                 step="0.000001"
                 className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
                 required
+              />
+            </label>
+
+            <label className="block space-y-2">
+              <span className="text-sm font-medium text-slate-700">Memo</span>
+              <input
+                value={sendMemo}
+                onChange={(event) => setSendMemo(event.target.value)}
+                placeholder="Invoice, payout reason, or note"
+                maxLength={180}
+                className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
               />
             </label>
 

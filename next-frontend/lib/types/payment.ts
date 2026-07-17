@@ -13,6 +13,10 @@ export type Payment = {
   customerName?: string;
   transactionHash?: string;
   explorerUrl?: string;
+  memo?: string;
+  memoId?: string;
+  memoReference?: string;
+  memoMode?: string;
   receiptUrl?: string;
   timeline?: PaymentTimelineEvent[];
   paidAt?: string;

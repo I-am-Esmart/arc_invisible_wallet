@@ -20,6 +20,16 @@ const ERC20_ABI = [
   "function transfer(address to, uint256 value) returns (bool)",
   "event Transfer(address indexed from, address indexed to, uint256 value)"
 ];
+const MEMO_ABI = [
+  "function memo(address target, bytes data, bytes32 memoId, bytes memoData)",
+  "event Memo(address indexed sender, address indexed target, bytes32 callDataHash, bytes32 indexed memoId, bytes memo, uint256 memoIndex)"
+];
+const MULTICALL3_FROM_ABI = [
+  "function aggregate3(tuple(address target, bool allowFailure, bytes callData)[] calls) returns (tuple(bool success, bytes returnData)[] returnData)"
+];
+const ARC_MEMO_ADDRESS = "0x5294E9927c3306DcBaDb03fe70b92e01cCede505";
+const ARC_MULTICALL3_FROM_ADDRESS = "0x522fAf9A91c41c443c66765030741e4AaCe147D0";
+const MAX_MEMO_BYTES = 512;
 
 const TOKENS = {
   USDC: {
@@ -368,6 +378,53 @@ function buildExplorerUrl(hash) {
   return `${ARC_EXPLORER_BASE_URL}/${hash}`;
 }
 
+function sanitizePublicError(error) {
+  const message = String(error?.shortMessage || error?.reason || error?.message || "Unknown error");
+
+  if (message.includes("CALL_EXCEPTION") || message.includes("missing revert data") || message.includes("execution reverted")) {
+    return "The token contract could not be reached on Arc Testnet right now.";
+  }
+
+  if (message.includes("rate limit") || message.includes("429")) {
+    return "Arc RPC is rate-limiting balance requests right now.";
+  }
+
+  return message.length > 160 ? `${message.slice(0, 157)}...` : message;
+}
+
+function buildMemoPayload({ kind = "transfer", reference = "", note = "", extra = {} } = {}) {
+  const normalizedReference = String(reference || `${kind}-${crypto.randomUUID()}`).trim();
+  const normalizedNote = String(note || "").trim();
+  const payload = {
+    app: "VeloxPay",
+    kind,
+    reference: normalizedReference,
+    note: normalizedNote,
+    ...extra
+  };
+  let memoText = JSON.stringify(payload);
+
+  if (Buffer.byteLength(memoText, "utf8") > MAX_MEMO_BYTES) {
+    payload.note = normalizedNote.slice(0, 160);
+    memoText = JSON.stringify(payload);
+  }
+
+  return {
+    id: ethers.id(normalizedReference),
+    text: memoText,
+    reference: normalizedReference,
+    note: normalizedNote
+  };
+}
+
+function getMemoContract(runner) {
+  return new ethers.Contract(ARC_MEMO_ADDRESS, MEMO_ABI, runner);
+}
+
+function getMulticall3FromContract(runner) {
+  return new ethers.Contract(ARC_MULTICALL3_FROM_ADDRESS, MULTICALL3_FROM_ABI, runner);
+}
+
 function buildFeatureCapabilities() {
   return {
     network: {
@@ -388,6 +445,8 @@ function buildFeatureCapabilities() {
       receipts: true,
       recurringRequests: true,
       batchTransfers: true,
+      nativeBatchTransfers: true,
+      transactionMemos: true,
       simulation: true,
       settlementReports: true
     },
@@ -992,7 +1051,7 @@ async function createCircleWallet(store) {
   };
 }
 
-async function executeCircleTokenTransfer(user, to, amount, tokenConfig) {
+async function executeCircleTokenTransfer(user, to, amount, tokenConfig, memoPayload = null) {
   if (!ENABLE_CIRCLE_WALLETS || !circleWalletsClient) {
     throw new Error("Circle wallet integration is not enabled");
   }
@@ -1061,6 +1120,10 @@ async function executeCircleTokenTransfer(user, to, amount, tokenConfig) {
     amount: String(amount),
     token: tokenConfig.symbol,
     symbol: tokenConfig.symbol,
+    memo: memoPayload?.text || "",
+    memoId: memoPayload?.id || "",
+    memoReference: memoPayload?.reference || "",
+    memoMode: memoPayload ? "veloxpay-record" : "none",
     explorer: buildExplorerUrl(txHash)
   };
 }
@@ -1895,11 +1958,32 @@ async function fetchTokenBalance(address, token) {
 }
 
 async function fetchAllTokenBalances(address) {
-  const entries = await Promise.all(
+  const results = await Promise.allSettled(
     Object.keys(TOKENS).map(async (token) => [token, await fetchTokenBalance(address, token)])
   );
+  const balances = {};
+  const warnings = {};
 
-  return Object.fromEntries(entries);
+  results.forEach((result, index) => {
+    const token = Object.keys(TOKENS)[index];
+
+    if (result.status === "fulfilled") {
+      const [symbol, balance] = result.value;
+      balances[symbol] = balance;
+      return;
+    }
+
+    warnings[token] = sanitizePublicError(result.reason);
+    balances[token] = {
+      symbol: token,
+      address: TOKENS[token].address,
+      balance: "0",
+      unavailable: true,
+      warning: warnings[token]
+    };
+  });
+
+  return { balances, warnings };
 }
 
 async function simulateTokenTransfer({ from, to, amount, token }) {
@@ -1923,7 +2007,7 @@ async function simulateTokenTransfer({ from, to, amount, token }) {
     provider.getFeeData()
   ]);
   const value = ethers.parseUnits(String(amount || "0"), decimals);
-  const gasLimit = BigInt(100000);
+  const gasLimit = memoPayload ? BigInt(240000) : BigInt(100000);
   const gasPrice = feeData.gasPrice || BigInt(0);
   const estimatedNetworkFee = gasLimit * gasPrice;
 
@@ -1944,7 +2028,7 @@ async function simulateTokenTransfer({ from, to, amount, token }) {
   };
 }
 
-async function executeTokenTransfer({ to, amount, email, token }) {
+async function executeTokenTransfer({ to, amount, email, token, memo, memoReference, memoKind = "transfer", memoExtra = {} }) {
   const tokenConfig = getTokenConfig(token);
 
   if (!tokenConfig) {
@@ -1956,6 +2040,19 @@ async function executeTokenTransfer({ to, amount, email, token }) {
   }
 
   assertPositiveAmount(amount);
+  const memoPayload = memo || memoReference || memoKind !== "transfer"
+    ? buildMemoPayload({
+        kind: memoKind,
+        reference: memoReference,
+        note: memo,
+        extra: {
+          token: tokenConfig.symbol,
+          amount: String(amount),
+          to,
+          ...memoExtra
+        }
+      })
+    : null;
 
   const store = readStore();
   const user = await getStoredUser(store, email) || { email };
@@ -1970,7 +2067,7 @@ async function executeTokenTransfer({ to, amount, email, token }) {
   // If Circle developer-controlled wallets are enabled and the user has a Circle wallet,
   // route the transfer through Circle's wallets API which handles gas and signing.
   if (ENABLE_CIRCLE_WALLETS && user && user.walletAddress) {
-    return executeCircleTokenTransfer(user, to, amount, tokenConfig);
+    return executeCircleTokenTransfer(user, to, amount, tokenConfig, memoPayload);
   }
 
   // Fallback: local signer using ethers (existing behavior)
@@ -2007,7 +2104,30 @@ async function executeTokenTransfer({ to, amount, email, token }) {
 
   console.log(`Sending ${amount} ${tokenConfig.symbol} from ${signerAddress} to ${to}`);
 
-  const tx = await tokenContract.transfer(to, value, overrides);
+  let tx;
+  let memoMode = "none";
+
+  if (memoPayload) {
+    const memoContract = getMemoContract(signer);
+    const memoCode = await provider.getCode(ARC_MEMO_ADDRESS);
+
+    if (memoCode === "0x") {
+      throw new Error("Arc Memo contract is not available on this RPC endpoint.");
+    }
+
+    const transferData = tokenContract.interface.encodeFunctionData("transfer", [to, value]);
+    tx = await memoContract.memo(
+      tokenConfig.address,
+      transferData,
+      memoPayload.id,
+      ethers.toUtf8Bytes(memoPayload.text),
+      overrides
+    );
+    memoMode = "arc-memo";
+  } else {
+    tx = await tokenContract.transfer(to, value, overrides);
+  }
+
   const receipt = await waitForTransactionReceiptWithBackoff(tx.hash);
   const transactionHash = receipt?.hash || receipt?.transactionHash || tx.hash;
 
@@ -2023,8 +2143,133 @@ async function executeTokenTransfer({ to, amount, email, token }) {
     amount,
     token: tokenConfig.symbol,
     symbol: tokenConfig.symbol,
+    memo: memoPayload?.text || "",
+    memoId: memoPayload?.id || "",
+    memoReference: memoPayload?.reference || "",
+    memoMode,
     explorer: buildExplorerUrl(transactionHash)
   };
+}
+
+async function executeNativeBatchTransfers({ email, transfers }) {
+  const store = readStore();
+  const user = await getStoredUser(store, email) || { email };
+
+  if (user.walletAddress) {
+    return null;
+  }
+
+  const { signer } = walletFromEmail(email);
+  const from = await signer.getAddress();
+  const multicallCode = await provider.getCode(ARC_MULTICALL3_FROM_ADDRESS);
+  const memoCode = await provider.getCode(ARC_MEMO_ADDRESS);
+
+  if (multicallCode === "0x" || memoCode === "0x") {
+    throw new Error("Arc batch transaction contracts are not available on this RPC endpoint.");
+  }
+
+  const tokenState = new Map();
+  const calls = [];
+  const preparedTransfers = [];
+
+  for (const [index, entry] of transfers.entries()) {
+    const tokenConfig = getTokenConfig(entry.token || "USDC");
+
+    if (!tokenConfig) {
+      throw new Error(buildTokenError());
+    }
+
+    if (!tokenState.has(tokenConfig.symbol)) {
+      const tokenContract = getTokenContract(tokenConfig.symbol, provider);
+      const [decimals, balance] = await Promise.all([
+        tokenContract.decimals(),
+        tokenContract.balanceOf(from)
+      ]);
+      tokenState.set(tokenConfig.symbol, {
+        tokenConfig,
+        decimals,
+        balance,
+        required: BigInt(0),
+        contract: tokenContract
+      });
+    }
+
+    const state = tokenState.get(tokenConfig.symbol);
+    const value = ethers.parseUnits(String(entry.amount), state.decimals);
+    state.required += value;
+
+    const memoPayload = buildMemoPayload({
+      kind: "batch-payout",
+      reference: entry.memoReference || `veloxpay-batch:${crypto.randomUUID()}:${index + 1}`,
+      note: entry.memo || `Batch payout ${index + 1}`,
+      extra: {
+        batchIndex: index + 1,
+        token: tokenConfig.symbol,
+        amount: String(entry.amount),
+        to: entry.to
+      }
+    });
+    const transferData = state.contract.interface.encodeFunctionData("transfer", [entry.to, value]);
+    const memoData = getMemoContract(provider).interface.encodeFunctionData("memo", [
+      tokenConfig.address,
+      transferData,
+      memoPayload.id,
+      ethers.toUtf8Bytes(memoPayload.text)
+    ]);
+
+    calls.push({
+      target: ARC_MEMO_ADDRESS,
+      allowFailure: false,
+      callData: memoData
+    });
+    preparedTransfers.push({
+      from,
+      to: entry.to,
+      amount: String(entry.amount),
+      token: tokenConfig.symbol,
+      symbol: tokenConfig.symbol,
+      memo: memoPayload.text,
+      memoId: memoPayload.id,
+      memoReference: memoPayload.reference,
+      memoMode: "arc-memo-batch"
+    });
+  }
+
+  for (const state of tokenState.values()) {
+    if (state.balance < state.required) {
+      throw new Error(
+        `Insufficient ${state.tokenConfig.symbol}. Have ${ethers.formatUnits(state.balance, state.decimals)} ${state.tokenConfig.symbol}, need ${ethers.formatUnits(state.required, state.decimals)} ${state.tokenConfig.symbol}.`
+      );
+    }
+  }
+
+  const feeData = await provider.getFeeData();
+  const gasLimit = BigInt(180000 + calls.length * 140000);
+  const overrides = { gasLimit };
+
+  if (feeData.gasPrice != null) {
+    overrides.gasPrice = feeData.gasPrice;
+  }
+
+  const multicall = getMulticall3FromContract(signer);
+  const tx = await multicall.aggregate3(calls, overrides);
+  const receipt = await waitForTransactionReceiptWithBackoff(tx.hash);
+
+  if (receipt?.status === 0) {
+    throw new Error(`Arc batch transaction reverted: ${tx.hash}`);
+  }
+
+  const transactionHash = receipt?.hash || receipt?.transactionHash || tx.hash;
+
+  return preparedTransfers.map((entry) => ({
+    ...entry,
+    status: "ok",
+    settlementState: "final",
+    settlementNetwork: "Arc Testnet",
+    hash: transactionHash,
+    batchMode: "arc-multicall3from",
+    explorer: buildExplorerUrl(transactionHash)
+  }));
 }
 
 function mapStoredPayment(payment) {
@@ -2037,6 +2282,10 @@ function mapStoredPayment(payment) {
     status: payment.status,
     transactionHash: payment.transactionHash,
     explorerUrl: payment.explorerUrl,
+    memo: payment.memo || "",
+    memoId: payment.memoId || "",
+    memoReference: payment.memoReference || "",
+    memoMode: payment.memoMode || "none",
     paidAt: payment.paidAt,
     payerEmail: payment.payerEmail,
     customerName: payment.customerName || "",
@@ -2190,12 +2439,13 @@ app.post("/auth/verify-code", async (req, res) => {
       email: normalizedEmail,
       displayName: String(displayName || challenge.displayName || "").trim()
     });
-    const balances = await fetchAllTokenBalances(user.address);
+    const balanceResult = await fetchAllTokenBalances(user.address);
     writeStore(store);
 
     res.json({
       ...mapStoredUser(user, { includeSession: true }),
-      balances,
+      balances: balanceResult.balances,
+      balanceWarnings: balanceResult.warnings,
       network: "arc-testnet"
     });
   } catch (err) {
@@ -2268,8 +2518,8 @@ app.get("/balances", async (req, res) => {
     const { address } = req.query;
     if (!address) return res.status(400).json({ error: "Address required" });
 
-    const balances = await fetchAllTokenBalances(address);
-    res.json({ address, balances });
+    const balanceResult = await fetchAllTokenBalances(address);
+    res.json({ address, balances: balanceResult.balances, warnings: balanceResult.warnings });
   } catch (err) {
     console.error(err);
     res.status(err.statusCode || 500).json({ error: err.message });
@@ -2317,6 +2567,10 @@ app.post("/send-transaction", async (req, res) => {
       amount: transfer.amount,
       symbol: transfer.symbol,
       token: transfer.token,
+      memo: transfer.memo || "",
+      memoId: transfer.memoId || "",
+      memoReference: transfer.memoReference || "",
+      memoMode: transfer.memoMode || "none",
       status: "confirmed",
       explorer: transfer.explorer,
       timestamp: new Date().toISOString()
@@ -2369,15 +2623,55 @@ app.post("/batch-transfers", async (req, res) => {
       assertPositiveAmount(entry.amount, `Transfer ${index + 1} amount`);
     });
 
-    const results = [];
     const store = readStore();
+    const nativeBatchResults = await executeNativeBatchTransfers({ email, transfers });
 
-    for (const entry of transfers) {
+    if (nativeBatchResults) {
+      nativeBatchResults.forEach((transfer) => {
+        store.txs.unshift({
+          hash: transfer.hash,
+          from: transfer.from,
+          to: transfer.to,
+          amount: transfer.amount,
+          symbol: transfer.symbol,
+          token: transfer.token,
+          memo: transfer.memo || "",
+          memoId: transfer.memoId || "",
+          memoReference: transfer.memoReference || "",
+          memoMode: transfer.memoMode || "none",
+          batchMode: transfer.batchMode || "arc-multicall3from",
+          status: "confirmed",
+          explorer: transfer.explorer,
+          timestamp: new Date().toISOString(),
+          batch: true
+        });
+      });
+
+      writeStore(store);
+      return res.json({
+        status: "completed",
+        count: nativeBatchResults.length,
+        batchMode: "arc-multicall3from",
+        hash: nativeBatchResults[0]?.hash || "",
+        settlementNetwork: "Arc Testnet",
+        settlementState: "final",
+        message: "Batch payout completed as one Arc Multicall3From transaction with per-transfer memos.",
+        results: nativeBatchResults
+      });
+    }
+
+    const results = [];
+
+    for (const [index, entry] of transfers.entries()) {
       const transfer = await executeTokenTransfer({
         email,
         to: entry.to,
         amount: entry.amount,
-        token: entry.token || "USDC"
+        token: entry.token || "USDC",
+        memo: entry.memo || `Batch payout ${index + 1}`,
+        memoReference: entry.memoReference || `veloxpay-batch:${crypto.randomUUID()}:${index + 1}`,
+        memoKind: "batch-payout",
+        memoExtra: { batchIndex: index + 1 }
       });
 
       store.txs.unshift({
@@ -2385,11 +2679,15 @@ app.post("/batch-transfers", async (req, res) => {
         from: transfer.from,
         to: transfer.to,
         amount: transfer.amount,
-        symbol: transfer.symbol,
-        token: transfer.token,
-        status: "confirmed",
-        explorer: transfer.explorer,
-        timestamp: new Date().toISOString(),
+      symbol: transfer.symbol,
+      token: transfer.token,
+      memo: transfer.memo || "",
+      memoId: transfer.memoId || "",
+      memoReference: transfer.memoReference || "",
+      memoMode: transfer.memoMode || "none",
+      status: "confirmed",
+      explorer: transfer.explorer,
+      timestamp: new Date().toISOString(),
         batch: true
       });
       results.push(transfer);
@@ -2399,8 +2697,10 @@ app.post("/batch-transfers", async (req, res) => {
     res.json({
       status: "completed",
       count: results.length,
+      batchMode: "circle-compatible-sequential",
       settlementNetwork: "Arc Testnet",
       settlementState: "final",
+      message: "Batch payout completed through Circle wallet transfers. Arc-native Multicall3From is used only for local EOA wallets because Arc requires EOA submission for native batches.",
       results
     });
   } catch (err) {
@@ -2792,7 +3092,8 @@ app.get("/unified-balance", async (req, res) => {
       return res.status(400).json({ error: "Valid wallet address required" });
     }
 
-    const arcBalances = await fetchAllTokenBalances(address);
+    const arcBalanceResult = await fetchAllTokenBalances(address);
+    const arcBalances = arcBalanceResult.balances;
     let appKitBalance = null;
 
     if (ENABLE_ARC_APP_KIT_EXECUTION && req.query.useAppKit === "true") {
@@ -3145,7 +3446,16 @@ app.post("/payment-links/:linkId/confirm-payment", async (req, res) => {
       to: paymentLink.recipientAddress,
       amount: paymentLink.amount,
       email: payerEmail,
-      token: paymentLink.currency
+      token: paymentLink.currency,
+      memo: paymentLink.description || buildPaymentLinkLabel(paymentLink),
+      memoReference: `veloxpay-payment:${paymentLink.id}:${paymentId}`,
+      memoKind: "payment-link",
+      memoExtra: {
+        paymentId,
+        linkId: paymentLink.id,
+        ownerEmail: paymentLink.ownerEmail,
+        payerEmail
+      }
     });
 
     const payment = {
@@ -3161,6 +3471,10 @@ app.post("/payment-links/:linkId/confirm-payment", async (req, res) => {
       recipientAddress: paymentLink.recipientAddress,
       transactionHash: transfer.hash,
       explorerUrl: transfer.explorer,
+      memo: transfer.memo || "",
+      memoId: transfer.memoId || "",
+      memoReference: transfer.memoReference || "",
+      memoMode: transfer.memoMode || "none",
       receiptUrl: buildReceiptUrl(paymentId),
       paidAt: new Date().toISOString(),
       createdAt: new Date().toISOString(),
@@ -3190,6 +3504,10 @@ app.post("/payment-links/:linkId/confirm-payment", async (req, res) => {
       amount: transfer.amount,
       symbol: transfer.symbol,
       token: transfer.token,
+      memo: transfer.memo || "",
+      memoId: transfer.memoId || "",
+      memoReference: transfer.memoReference || "",
+      memoMode: transfer.memoMode || "none",
       status: "confirmed",
       explorer: transfer.explorer,
       timestamp: payment.paidAt

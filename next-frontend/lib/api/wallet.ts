@@ -1,5 +1,5 @@
 import { backendFetch } from "./backend";
-import type { WalletBalances, WalletLoginChallenge, WalletTransaction, WalletUser } from "@/lib/types/wallet";
+import type { WalletBalanceWarnings, WalletBalances, WalletLoginChallenge, WalletTransaction, WalletUser } from "@/lib/types/wallet";
 
 export async function checkBackend() {
   return backendFetch<{ status: string; message: string }>("/health");
@@ -32,7 +32,7 @@ export async function updateWalletProfile(email: string, displayName?: string) {
 }
 
 export async function fetchWalletBalances(address: string) {
-  return backendFetch<{ address: string; balances: WalletBalances }>(
+  return backendFetch<{ address: string; balances: WalletBalances; warnings?: WalletBalanceWarnings }>(
     `/balances?address=${encodeURIComponent(address)}`,
   );
 }
@@ -49,6 +49,7 @@ export async function sendWalletTransaction(payload: {
   email: string;
   arcKeyId?: string;
   token: string;
+  memo?: string;
   walletSessionToken?: string;
 }) {
   return backendFetch<{
@@ -59,6 +60,10 @@ export async function sendWalletTransaction(payload: {
     from: string;
     to: string;
     amount: string;
+    memo?: string;
+    memoId?: string;
+    memoReference?: string;
+    memoMode?: string;
   }>("/send-transaction", {
     method: "POST",
     body: JSON.stringify(payload),

@@ -64,7 +64,7 @@ export async function simulateTransaction(payload: {
 
 export async function sendBatchTransfers(payload: {
   email: string;
-  transfers: Array<{ to: string; amount: string; token: string }>;
+  transfers: Array<{ to: string; amount: string; token: string; memo?: string }>;
 }) {
   return backendFetch<FeatureStatus>("/batch-transfers", {
     method: "POST",

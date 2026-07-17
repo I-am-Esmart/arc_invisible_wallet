@@ -19,6 +19,7 @@ export default function WalletSendPage() {
   const [token, setToken] = useState<(typeof TOKEN_OPTIONS)[number]["value"]>("USDC");
   const [to, setTo] = useState("");
   const [amount, setAmount] = useState("");
+  const [memo, setMemo] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -37,11 +38,12 @@ export default function WalletSendPage() {
     setExplorerUrl("");
 
     try {
-      const result = await sendFromWallet({ to, amount, token });
+      const result = await sendFromWallet({ to, amount, token, memo });
       setSuccess(`Sent ${result.amount} ${result.symbol}.`);
       setExplorerUrl(result.explorer);
       setTo("");
       setAmount("");
+      setMemo("");
     } catch (sendError) {
       setError(sendError instanceof Error ? sendError.message : "Unable to send transaction.");
     } finally {
@@ -121,6 +123,17 @@ export default function WalletSendPage() {
               step="0.000001"
               className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
               required
+            />
+          </label>
+
+          <label className="block space-y-2">
+            <span className="text-sm font-medium text-slate-700">Memo</span>
+            <input
+              value={memo}
+              onChange={(event) => setMemo(event.target.value)}
+              placeholder="Invoice, payout reason, or note"
+              maxLength={180}
+              className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
             />
           </label>
 

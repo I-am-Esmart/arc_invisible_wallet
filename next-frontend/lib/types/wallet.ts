@@ -4,8 +4,12 @@ export type WalletBalances = Record<
     symbol: string;
     address: string;
     balance: string;
+    unavailable?: boolean;
+    warning?: string;
   }
 >;
+
+export type WalletBalanceWarnings = Record<string, string>;
 
 export type WalletUser = {
   email: string;
@@ -43,4 +47,8 @@ export type WalletTransaction = {
   explorerUrl?: string;
   timestamp: string;
   paidAt?: string;
+  memo?: string;
+  memoId?: string;
+  memoReference?: string;
+  memoMode?: string;
 };

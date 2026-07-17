@@ -71,8 +71,8 @@ export default function FeaturesPage() {
         .map((row) => row.trim())
         .filter(Boolean)
         .map((row) => {
-          const [to, amount, token = "USDC"] = row.split(",").map((value) => value.trim());
-          return { to, amount, token };
+          const [to, amount, token = "USDC", memo = ""] = row.split(",").map((value) => value.trim());
+          return { to, amount, token, memo };
         }),
     [batchRows],
   );
@@ -203,14 +203,14 @@ export default function FeaturesPage() {
       <Card>
         <h2 className="text-lg font-semibold text-slate-900">Batch payouts</h2>
         <p className="mt-2 text-sm text-slate-600">
-          Enter one transfer per line as recipient, amount, token. This uses the same Arc/Circle execution path as regular sends.
+          Enter one transfer per line as recipient, amount, token, memo. Local Arc wallets use one native Multicall3From batch transaction; Circle wallets use the compatible transfer route.
         </p>
         <form onSubmit={handleBatchSubmit} className="mt-4 space-y-4">
           <textarea
             value={batchRows}
             onChange={(event) => setBatchRows(event.target.value)}
             rows={5}
-            placeholder="0xrecipient,1.00,USDC"
+            placeholder="0xrecipient,1.00,USDC,Invoice payout"
             className="w-full rounded-2xl border border-slate-300 px-4 py-3 font-mono text-sm"
             aria-label="Batch transfers"
           />
