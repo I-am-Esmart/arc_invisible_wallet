@@ -266,8 +266,8 @@ export function CreateLinkForm({
         <div
           className={`mt-5 rounded-2xl p-4 text-sm ${
             state.status === "success"
-              ? "bg-emerald-50 text-emerald-700"
-              : "bg-rose-50 text-rose-700"
+              ? "bg-emerald-50 text-emerald-800 dark:border dark:border-emerald-800/50 dark:bg-emerald-950/70 dark:text-emerald-100"
+              : "bg-rose-50 text-rose-700 dark:border dark:border-rose-800/50 dark:bg-rose-950/70 dark:text-rose-100"
           }`}
         >
           <p>{state.message}</p>
@@ -277,16 +277,16 @@ export function CreateLinkForm({
                 Your request is ready. Send this link to the person who should pay you.
               </p>
               <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-start">
-                <p className="min-w-0 flex-1 break-all font-medium text-slate-800">{state.url}</p>
+                <p className="min-w-0 flex-1 break-all font-medium text-slate-800 dark:text-emerald-50">{state.url}</p>
                 <button
                   type="button"
                   onClick={handleCopyLink}
-                  className="inline-flex shrink-0 items-center justify-center rounded-xl bg-white px-3 py-2 text-xs font-semibold text-slate-700 ring-1 ring-slate-200 transition hover:bg-slate-50"
+                  className="inline-flex shrink-0 items-center justify-center rounded-xl bg-white px-3 py-2 text-xs font-semibold text-slate-700 ring-1 ring-slate-200 transition hover:bg-slate-50 dark:bg-slate-950 dark:text-white dark:ring-emerald-700 dark:hover:bg-slate-900"
                 >
                   {copied ? "Copied" : "Copy link"}
                 </button>
               </div>
-              <div className="mt-3 rounded-xl bg-white/80 p-3 text-xs leading-5 text-slate-600 ring-1 ring-emerald-100">
+              <div className="mt-3 rounded-xl bg-white/80 p-3 text-xs leading-5 text-slate-600 ring-1 ring-emerald-100 dark:bg-emerald-950 dark:text-emerald-100 dark:ring-emerald-800/70">
                 What happens next: the payer opens the link, sees who they are paying, confirms the amount, and completes the payment from one page.
               </div>
             </>
