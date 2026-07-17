@@ -60,6 +60,8 @@ export function PaymentStatus({
           {receiptUrl ? (
             <a
               href={receiptUrl}
+              target="_blank"
+              rel="noreferrer"
               className="inline-flex items-center font-medium text-brand-600 hover:underline"
             >
               View receipt

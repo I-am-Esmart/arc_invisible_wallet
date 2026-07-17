@@ -34,11 +34,13 @@ const MAX_MEMO_BYTES = 512;
 const TOKENS = {
   USDC: {
     symbol: "USDC",
-    address: "0x3600000000000000000000000000000000000000"
+    address: "0x3600000000000000000000000000000000000000",
+    decimals: 6
   },
   EURC: {
     symbol: "EURC",
-    address: "0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a"
+    address: "0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a",
+    decimals: 6
   }
 };
 
@@ -1171,8 +1173,9 @@ function buildPaymentLinkUrl(paymentLink) {
   return `${DEFAULT_LINK_BASE_URL}${buildPaymentLinkPath(paymentLink)}`;
 }
 
-function buildReceiptUrl(paymentId) {
-  return `${DEFAULT_LINK_BASE_URL}/receipt/${paymentId}`;
+function buildReceiptUrl(paymentId, ownerEmail = "") {
+  const receiptUrl = `${DEFAULT_LINK_BASE_URL}/receipt/${paymentId}`;
+  return ownerEmail ? `${receiptUrl}?ownerEmail=${encodeURIComponent(normalizeEmail(ownerEmail))}` : receiptUrl;
 }
 
 function hydratePaymentLinkAccess(paymentLink) {
@@ -1945,10 +1948,8 @@ async function resolveOwnerIdentity(store, { email, displayName } = {}) {
 async function fetchTokenBalance(address, token) {
   const tokenConfig = getTokenConfig(token);
   const tokenContract = getTokenContract(tokenConfig.symbol);
-  const [rawBalance, decimals] = await Promise.all([
-    tokenContract.balanceOf(address),
-    tokenContract.decimals()
-  ]);
+  const rawBalance = await tokenContract.balanceOf(address);
+  const decimals = tokenConfig.decimals ?? await tokenContract.decimals();
 
   return {
     symbol: tokenConfig.symbol,
@@ -2000,12 +2001,12 @@ async function simulateTokenTransfer({ from, to, amount, token }) {
   assertPositiveAmount(amount);
 
   const tokenContract = getTokenContract(tokenConfig.symbol);
-  const [rawTokenBalance, decimals, nativeBalance, feeData] = await Promise.all([
+  const [rawTokenBalance, nativeBalance, feeData] = await Promise.all([
     tokenContract.balanceOf(from),
-    tokenContract.decimals(),
     provider.getBalance(from),
     provider.getFeeData()
   ]);
+  const decimals = tokenConfig.decimals ?? await tokenContract.decimals();
   const value = ethers.parseUnits(String(amount || "0"), decimals);
   const gasLimit = memoPayload ? BigInt(240000) : BigInt(100000);
   const gasPrice = feeData.gasPrice || BigInt(0);
@@ -2072,12 +2073,12 @@ async function executeTokenTransfer({ to, amount, email, token, memo, memoRefere
 
   // Fallback: local signer using ethers (existing behavior)
   const tokenContract = getTokenContract(tokenConfig.symbol, signer);
-  const [rawTokenBalance, decimals, nativeBalance, feeData] = await Promise.all([
+  const [rawTokenBalance, nativeBalance, feeData] = await Promise.all([
     tokenContract.balanceOf(signerAddress),
-    tokenContract.decimals(),
     provider.getBalance(signerAddress),
     provider.getFeeData()
   ]);
+  const decimals = tokenConfig.decimals ?? await tokenContract.decimals();
 
   const value = ethers.parseUnits(String(amount), decimals);
 
@@ -2181,13 +2182,10 @@ async function executeNativeBatchTransfers({ email, transfers }) {
 
     if (!tokenState.has(tokenConfig.symbol)) {
       const tokenContract = getTokenContract(tokenConfig.symbol, provider);
-      const [decimals, balance] = await Promise.all([
-        tokenContract.decimals(),
-        tokenContract.balanceOf(from)
-      ]);
+      const balance = await tokenContract.balanceOf(from);
       tokenState.set(tokenConfig.symbol, {
         tokenConfig,
-        decimals,
+        decimals: tokenConfig.decimals ?? await tokenContract.decimals(),
         balance,
         required: BigInt(0),
         contract: tokenContract
@@ -2277,6 +2275,7 @@ function mapStoredPayment(payment) {
     id: payment.id,
     linkId: payment.linkId,
     linkLabel: payment.linkLabel,
+    ownerEmail: payment.ownerEmail,
     amount: payment.amount,
     currency: payment.currency,
     status: payment.status,
@@ -2289,7 +2288,7 @@ function mapStoredPayment(payment) {
     paidAt: payment.paidAt,
     payerEmail: payment.payerEmail,
     customerName: payment.customerName || "",
-    receiptUrl: payment.receiptUrl || buildReceiptUrl(payment.id),
+    receiptUrl: payment.receiptUrl || buildReceiptUrl(payment.id, payment.ownerEmail),
     timeline: Array.isArray(payment.timeline) ? payment.timeline : []
   };
 }
@@ -3033,9 +3032,13 @@ app.get("/payments", async (req, res) => {
   }
 });
 
-app.get("/payments/:paymentId", async (req, res) => {
+app.get("/payments/:paymentId", async (req, res, next) => {
   try {
     const paymentId = String(req.params.paymentId || "").trim();
+
+    if (paymentId === "settlement-report") {
+      return next();
+    }
 
     if (!paymentId) {
       return res.status(400).json({ error: "Payment ID required" });
@@ -3475,7 +3478,7 @@ app.post("/payment-links/:linkId/confirm-payment", async (req, res) => {
       memoId: transfer.memoId || "",
       memoReference: transfer.memoReference || "",
       memoMode: transfer.memoMode || "none",
-      receiptUrl: buildReceiptUrl(paymentId),
+      receiptUrl: buildReceiptUrl(paymentId, paymentLink.ownerEmail),
       paidAt: new Date().toISOString(),
       createdAt: new Date().toISOString(),
       timeline: [
@@ -3529,7 +3532,7 @@ app.post("/payment-links/:linkId/confirm-payment", async (req, res) => {
       recipientAddress: paymentLink.recipientAddress,
       error: err.message,
       createdAt: new Date().toISOString(),
-      receiptUrl: buildReceiptUrl(paymentId),
+      receiptUrl: buildReceiptUrl(paymentId, paymentLink.ownerEmail),
       timeline: [
         createTimelineEvent("sent", "Payment request created"),
         createTimelineEvent("opened", "Payment page opened"),

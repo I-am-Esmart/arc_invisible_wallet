@@ -7,6 +7,24 @@ import { PaymentTimeline } from "@/components/shared/payment-timeline";
 import type { Payment } from "@/lib/types/payment";
 import { formatDate, formatMoney } from "@/lib/utils/format";
 
+function buildReceiptHref(payment: Payment) {
+  if (!payment.receiptUrl) {
+    return "";
+  }
+
+  if (!payment.ownerEmail) {
+    return payment.receiptUrl;
+  }
+
+  try {
+    const url = new URL(payment.receiptUrl, window.location.origin);
+    url.searchParams.set("ownerEmail", payment.ownerEmail);
+    return `${url.pathname}${url.search}`;
+  } catch {
+    return payment.receiptUrl;
+  }
+}
+
 export function PaymentsTable({ payments }: { payments: Payment[] }) {
   const [expandedId, setExpandedId] = useState("");
 
@@ -57,7 +75,9 @@ export function PaymentsTable({ payments }: { payments: Payment[] }) {
                   <div className="flex flex-wrap gap-2">
                     {payment.receiptUrl ? (
                       <a
-                        href={payment.receiptUrl}
+                        href={buildReceiptHref(payment)}
+                        target="_blank"
+                        rel="noreferrer"
                         className="rounded-2xl bg-slate-100 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-200"
                       >
                         Receipt

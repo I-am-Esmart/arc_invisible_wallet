@@ -6,6 +6,7 @@ export type Payment = {
   id: string;
   linkId: string;
   linkLabel?: string;
+  ownerEmail?: string;
   amount: string;
   currency: PaymentCurrency;
   status: PaymentStatus;

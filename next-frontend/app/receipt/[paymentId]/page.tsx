@@ -2,18 +2,29 @@ import { notFound } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { PaymentTimeline } from "@/components/shared/payment-timeline";
 import { ReceiptActions } from "@/components/payment/receipt-actions";
-import { getPaymentReceipt } from "@/lib/api/payments";
+import { getPaymentReceipt, listPayments } from "@/lib/api/payments";
 import { formatDate, formatMoney } from "@/lib/utils/format";
 
 type ReceiptPageProps = {
   params: Promise<{
     paymentId: string;
   }>;
+  searchParams: Promise<{
+    ownerEmail?: string;
+  }>;
 };
 
-export default async function ReceiptPage({ params }: ReceiptPageProps) {
+export default async function ReceiptPage({ params, searchParams }: ReceiptPageProps) {
   const { paymentId } = await params;
-  const payment = await getPaymentReceipt(paymentId).catch(() => null);
+  const { ownerEmail = "" } = await searchParams;
+  const payment = await getPaymentReceipt(paymentId).catch(async () => {
+    if (!ownerEmail) {
+      return null;
+    }
+
+    const ownerPayments = await listPayments(ownerEmail).catch(() => []);
+    return ownerPayments.find((entry) => entry.id === paymentId) || null;
+  });
 
   if (!payment) {
     notFound();
