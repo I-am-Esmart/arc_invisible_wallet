@@ -7,6 +7,7 @@ export type Payment = {
   linkId: string;
   linkLabel?: string;
   ownerEmail?: string;
+  direction?: "incoming" | "outgoing";
   amount: string;
   currency: PaymentCurrency;
   status: PaymentStatus;

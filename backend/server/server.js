@@ -171,6 +171,10 @@ function persistentOwnerPaymentsKey(email) {
   return `veloxpay:payments:owner:${normalizeEmail(email)}`;
 }
 
+function persistentPayerPaymentsKey(email) {
+  return `veloxpay:payments:payer:${normalizeEmail(email)}`;
+}
+
 function persistentPaymentKey(paymentId) {
   return `veloxpay:payment:${String(paymentId || "").trim()}`;
 }
@@ -299,6 +303,14 @@ async function savePersistentPayment(payment) {
   const nextPayments = Array.isArray(existing) ? existing : [];
   const deduped = [payment, ...nextPayments.filter((entry) => entry?.id !== payment.id)].slice(0, 100);
   await setPersistentJson(listKey, deduped);
+
+  if (payment.payerEmail) {
+    const payerListKey = persistentPayerPaymentsKey(payment.payerEmail);
+    const existingPayerPayments = await getPersistentJson(payerListKey);
+    const nextPayerPayments = Array.isArray(existingPayerPayments) ? existingPayerPayments : [];
+    const dedupedPayerPayments = [payment, ...nextPayerPayments.filter((entry) => entry?.id !== payment.id)].slice(0, 100);
+    await setPersistentJson(payerListKey, dedupedPayerPayments);
+  }
 }
 
 async function listPersistentPayments(ownerEmail) {
@@ -378,6 +390,15 @@ function usernameFromOwner(email, ownerName) {
 
 function buildExplorerUrl(hash) {
   return `${ARC_EXPLORER_BASE_URL}/${hash}`;
+}
+
+async function listPersistentPayerPayments(payerEmail) {
+  if (!HAS_PERSISTENT_KV || !payerEmail) {
+    return [];
+  }
+
+  const stored = await getPersistentJson(persistentPayerPaymentsKey(payerEmail));
+  return Array.isArray(stored) ? stored : [];
 }
 
 function sanitizePublicError(error) {
@@ -2983,7 +3004,54 @@ app.get("/payment-links/recurring", async (req, res) => {
 app.get("/payments", async (req, res) => {
   try {
     const ownerEmail = normalizeEmail(req.query.ownerEmail);
+    const payerEmail = normalizeEmail(req.query.payerEmail);
     const store = readStore();
+
+    if (payerEmail && !ownerEmail) {
+      const storedOutgoingPayments = mergeUniqueByKey(
+        await listPersistentPayerPayments(payerEmail),
+        store.payments.filter((payment) => payment.payerEmail === payerEmail),
+        (payment) => payment.id
+      )
+        .sort((a, b) => new Date(b.paidAt || b.createdAt).getTime() - new Date(a.paidAt || a.createdAt).getTime())
+        .map((payment) => ({
+          ...mapStoredPayment(payment),
+          direction: "outgoing"
+        }));
+
+      const payer = await getStoredUser(store, payerEmail);
+      const { signer } = walletFromEmail(payerEmail);
+      const payerAddress = payer?.walletAddress || payer?.address || signer.address;
+      let onchainOutgoing = [];
+
+      try {
+        onchainOutgoing = (await fetchTokenTransferHistory(payerAddress, { direction: "outgoing" }))
+          .map((tx) => ({
+            id: tx.id,
+            linkId: tx.hash,
+            linkLabel: "Outgoing transfer",
+            amount: tx.amount,
+            currency: tx.currency,
+            status: "completed",
+            transactionHash: tx.hash,
+            explorerUrl: tx.explorerUrl,
+            paidAt: tx.paidAt,
+            payerEmail,
+            direction: "outgoing"
+          }));
+      } catch (paymentHistoryError) {
+        console.warn("Outgoing payments fallback to stored records:", paymentHistoryError.message);
+      }
+
+      const outgoingPayments = mergeUniqueByKey(
+        storedOutgoingPayments,
+        onchainOutgoing,
+        (payment) => payment.transactionHash || payment.id
+      ).sort((a, b) => new Date(b.paidAt || 0).getTime() - new Date(a.paidAt || 0).getTime());
+
+      return res.json(outgoingPayments);
+    }
+
     const storedPayments = mergeUniqueByKey(
       ownerEmail ? await listPersistentPayments(ownerEmail) : [],
       store.payments,
@@ -2991,7 +3059,10 @@ app.get("/payments", async (req, res) => {
     )
       .filter((payment) => !ownerEmail || payment.ownerEmail === ownerEmail)
       .sort((a, b) => new Date(b.paidAt || b.createdAt).getTime() - new Date(a.paidAt || a.createdAt).getTime())
-      .map(mapStoredPayment);
+      .map((payment) => ({
+        ...mapStoredPayment(payment),
+        direction: "incoming"
+      }));
 
     if (!ownerEmail) {
       return res.json(storedPayments);
@@ -3013,7 +3084,8 @@ app.get("/payments", async (req, res) => {
           status: "completed",
           transactionHash: tx.hash,
           explorerUrl: tx.explorerUrl,
-          paidAt: tx.paidAt
+          paidAt: tx.paidAt,
+          direction: "incoming"
         }));
     } catch (paymentHistoryError) {
       console.warn("Payments fallback to stored records:", paymentHistoryError.message);

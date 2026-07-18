@@ -8,11 +8,17 @@ type PaymentChallenge = {
   message: string;
 };
 
-export async function listPayments(ownerEmail?: string) {
+export async function listPayments(filter?: string | { ownerEmail?: string; payerEmail?: string }) {
   const params = new URLSearchParams();
+  const ownerEmail = typeof filter === "string" ? filter : filter?.ownerEmail;
+  const payerEmail = typeof filter === "string" ? "" : filter?.payerEmail;
 
   if (ownerEmail) {
     params.set("ownerEmail", ownerEmail);
+  }
+
+  if (payerEmail) {
+    params.set("payerEmail", payerEmail);
   }
 
   return backendFetch<Payment[]>(`/payments${params.toString() ? `?${params.toString()}` : ""}`);

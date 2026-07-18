@@ -47,26 +47,28 @@ export function PaymentStatus({
             <span className="font-medium text-slate-800">Transaction hash:</span>{" "}
             <span className="break-all font-mono">{transactionHash}</span>
           </div>
-          {explorerUrl ? (
-            <a
-              href={explorerUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center font-medium text-brand-600 hover:underline"
-            >
-              View on Arc Explorer
-            </a>
-          ) : null}
-          {receiptUrl ? (
-            <a
-              href={receiptUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center font-medium text-brand-600 hover:underline"
-            >
-              View receipt
-            </a>
-          ) : null}
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+            {explorerUrl ? (
+              <a
+                href={explorerUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center font-medium text-brand-600 hover:underline"
+              >
+                View on Arc Explorer
+              </a>
+            ) : <span />}
+            {receiptUrl ? (
+              <a
+                href={receiptUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center rounded-2xl bg-white px-4 py-2 text-sm font-semibold text-brand-700 ring-1 ring-brand-100 transition hover:bg-brand-50"
+              >
+                View receipt
+              </a>
+            ) : null}
+          </div>
         </div>
       ) : null}
 

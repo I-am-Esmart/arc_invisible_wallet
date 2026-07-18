@@ -25,19 +25,29 @@ function buildReceiptHref(payment: Payment) {
   }
 }
 
-export function PaymentsTable({ payments }: { payments: Payment[] }) {
+export function PaymentsTable({
+  payments,
+  title = "Payments",
+  description = "Recent payments collected through payment requests.",
+  emptyMessage = "No payments yet.",
+}: {
+  payments: Payment[];
+  title?: string;
+  description?: string;
+  emptyMessage?: string;
+}) {
   const [expandedId, setExpandedId] = useState("");
 
   return (
     <Card>
-      <h2 className="text-lg font-semibold text-slate-900">Payments</h2>
+      <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
       <p className="mt-1 text-sm text-slate-600">
-        Recent incoming payments collected through payment requests.
+        {description}
       </p>
 
       {payments.length === 0 ? (
         <div className="mt-6 rounded-2xl border border-dashed border-slate-200 p-8 text-sm text-slate-500">
-          No payments yet.
+          {emptyMessage}
         </div>
       ) : (
         <div className="mt-6 space-y-4">
@@ -60,6 +70,9 @@ export function PaymentsTable({ payments }: { payments: Payment[] }) {
                       >
                         {payment.status}
                       </Badge>
+                      {payment.direction ? (
+                        <Badge variant="neutral">{payment.direction === "outgoing" ? "paid" : "received"}</Badge>
+                      ) : null}
                       {payment.customerName ? <Badge variant="neutral">{payment.customerName}</Badge> : null}
                     </div>
                     <div className="mt-3 text-base font-semibold text-slate-900">
@@ -67,7 +80,11 @@ export function PaymentsTable({ payments }: { payments: Payment[] }) {
                     </div>
                     <div className="mt-3 flex flex-wrap gap-x-6 gap-y-2 text-sm text-slate-600">
                       <span>{formatMoney(payment.amount, payment.currency)}</span>
-                      <span>{payment.payerEmail || "Payer email unavailable"}</span>
+                      <span>
+                        {payment.direction === "outgoing"
+                          ? payment.ownerEmail || "Receiver unavailable"
+                          : payment.payerEmail || "Payer email unavailable"}
+                      </span>
                       <span>{formatDate(payment.paidAt)}</span>
                     </div>
                   </div>
