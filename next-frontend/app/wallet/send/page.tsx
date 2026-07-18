@@ -65,6 +65,7 @@ export default function WalletSendPage() {
         to,
         amount,
         token,
+        memo,
       });
       setSimulation(result);
     } catch (simulateError) {

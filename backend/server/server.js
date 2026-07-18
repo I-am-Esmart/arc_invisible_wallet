@@ -1987,7 +1987,7 @@ async function fetchAllTokenBalances(address) {
   return { balances, warnings };
 }
 
-async function simulateTokenTransfer({ from, to, amount, token }) {
+async function simulateTokenTransfer({ from, to, amount, token, memo }) {
   const tokenConfig = getTokenConfig(token);
 
   if (!tokenConfig) {
@@ -2008,7 +2008,7 @@ async function simulateTokenTransfer({ from, to, amount, token }) {
   ]);
   const decimals = tokenConfig.decimals ?? await tokenContract.decimals();
   const value = ethers.parseUnits(String(amount || "0"), decimals);
-  const gasLimit = memoPayload ? BigInt(240000) : BigInt(100000);
+  const gasLimit = String(memo || "").trim() ? BigInt(240000) : BigInt(100000);
   const gasPrice = feeData.gasPrice || BigInt(0);
   const estimatedNetworkFee = gasLimit * gasPrice;
 
@@ -2585,13 +2585,13 @@ app.post("/send-transaction", async (req, res) => {
 
 app.post("/transactions/simulate", async (req, res) => {
   try {
-    const { to, amount, email, token } = req.body || {};
+    const { to, amount, email, token, memo } = req.body || {};
     requireWalletSession(req, email);
     const store = readStore();
     const user = await getStoredUser(store, email);
     const { signer } = walletFromEmail(email);
     const from = user?.walletAddress || user?.address || await signer.getAddress();
-    const simulation = await simulateTokenTransfer({ from, to, amount, token });
+    const simulation = await simulateTokenTransfer({ from, to, amount, token, memo });
 
     res.json(simulation);
   } catch (err) {

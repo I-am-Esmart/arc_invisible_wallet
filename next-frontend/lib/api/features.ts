@@ -55,6 +55,7 @@ export async function simulateTransaction(payload: {
   to: string;
   amount: string;
   token: string;
+  memo?: string;
 }) {
   return backendFetch<FeatureStatus>("/transactions/simulate", {
     method: "POST",
