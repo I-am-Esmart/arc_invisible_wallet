@@ -906,6 +906,7 @@ function createEmptyStore() {
     walletSetId: null,
     txs: [],
     paymentLinks: [],
+    smartRequests: [],
     payments: [],
     paymentAuthSessions: [],
     customers: []
@@ -940,6 +941,7 @@ function readStore() {
     users: parsed.users && typeof parsed.users === "object" ? parsed.users : {},
     txs: Array.isArray(parsed.txs) ? parsed.txs : [],
     paymentLinks: Array.isArray(parsed.paymentLinks) ? parsed.paymentLinks : [],
+    smartRequests: Array.isArray(parsed.smartRequests) ? parsed.smartRequests : [],
     payments: Array.isArray(parsed.payments) ? parsed.payments : [],
     paymentAuthSessions: Array.isArray(parsed.paymentAuthSessions) ? parsed.paymentAuthSessions : [],
     customers: Array.isArray(parsed.customers) ? parsed.customers : [],

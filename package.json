@@ -1,0 +1,23 @@
+{
+  "name": "veloxpay-workspace",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "app:dev": "npm --prefix veloxpay run dev",
+    "app:lint": "npm --prefix veloxpay run lint",
+    "app:build": "npm --prefix veloxpay run build",
+    "backend:dev": "npm --prefix backend/server run dev",
+    "backend:start": "npm --prefix backend/server run start",
+    "backend:test": "npm --prefix backend/server run test",
+    "legacy:dev": "npm --prefix frontend run dev",
+    "legacy:lint": "npm --prefix frontend run lint",
+    "legacy:build": "npm --prefix frontend run build",
+    "contracts:build": "forge build --root contracts",
+    "contracts:test": "forge test --root contracts",
+    "contracts:fmt": "forge fmt --root contracts",
+    "contracts:fmt:check": "forge fmt --check --root contracts",
+    "contracts:clean": "forge clean --root contracts",
+    "contracts:artifacts": "node contracts/deploy/extract-veloxpay-artifact.mjs",
+    "contracts:deploy:arc-testnet": "node --env-file-if-exists=contracts/.env contracts/deploy/deploy-arc-testnet.mjs"
+  }
+}

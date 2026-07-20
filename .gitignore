@@ -10,10 +10,14 @@ yarn-error.log*
 .env.development.local
 .env.test.local
 .env.production.local
+contracts/.env
 
 # Build outputs
 dist/
 build/
+contracts/out/
+contracts/cache/
+contracts/broadcast/
 
 # Logs
 logs

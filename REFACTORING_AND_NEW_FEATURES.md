@@ -519,7 +519,7 @@ const loginResult = await circleWallets.authenticateWithPasskey({
 **Files to Refactor:**
 - [backend/server/server.js](backend/server/server.js#L1561-L1620) (auth endpoints)
 - [frontend/src/pages/Login.jsx](frontend/src/pages/Login.jsx)
-- [next-frontend/app/login/page.tsx](next-frontend/app/login/page.tsx)
+- [veloxpay/app/login/page.tsx](veloxpay/app/login/page.tsx)
 
 **Effort:** 2-3 days
 

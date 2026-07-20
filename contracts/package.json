@@ -1,0 +1,10 @@
+{
+  "name": "veloxpay-contracts",
+  "private": true,
+  "version": "0.1.0",
+  "dependencies": {
+    "@circle-fin/developer-controlled-wallets": "^10.8.0",
+    "@circle-fin/smart-contract-platform": "^10.8.0",
+    "@openzeppelin/contracts": "^5.4.0"
+  }
+}

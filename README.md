@@ -2,7 +2,7 @@
 
 VeloxPay is an Arc testnet wallet and payment-link product built with Next.js, Express, and ethers.js.
 
-The main user experience now lives in `next-frontend/`, where a user can create or restore a wallet with email, view USDC and EURC balances, send and receive funds, review wallet activity, create payment links, and track incoming payments from one dashboard.
+The main user experience now lives in `veloxpay/`, where a user can create or restore a wallet with email, view USDC and EURC balances, send and receive funds, review wallet activity, create payment links, and track incoming payments from one dashboard.
 
 The older Vite wallet frontend still exists in `frontend/` as a legacy client, but VeloxPay is the primary frontend.
 
@@ -35,14 +35,14 @@ Copy `frontend/.env.example` to `.env.local` for local development.
 ### 3. Start the Next.js payment-links frontend
 
 ```bash
-cd next-frontend
+cd veloxpay
 npm install
 npm run dev
 ```
 
 The Next.js app runs on `http://localhost:3000`.
 
-Copy `next-frontend/.env.example` to `.env.local` and point it to your backend.
+Copy `veloxpay/.env.example` to `.env.local` and point it to your backend.
 
 ## Fresh Vercel deployment
 
@@ -58,9 +58,9 @@ Use `backend/server/.env.example` as the source of truth for required backend en
 ### Next.js frontend project
 
 Root directory:
-- `next-frontend`
+- `veloxpay`
 
-Use `next-frontend/.env.example` as the source of truth for required frontend environment variables.
+Use `veloxpay/.env.example` as the source of truth for required frontend environment variables.
 
 After deployment:
 1. Copy the backend production URL.

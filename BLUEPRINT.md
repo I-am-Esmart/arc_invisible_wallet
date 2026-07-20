@@ -3,7 +3,7 @@
 ## 1. System Architecture
 
 - Existing Node.js backend remains the source of truth for wallets, balances, token transfers, payment links, and payment records.
-- New Next.js App Router frontend is added as a separate app in `next-frontend/`.
+- New Next.js App Router frontend is added as a separate app in `veloxpay/`.
 - Next.js is responsible for:
   - rendering public payment pages
   - rendering the authenticated dashboard
@@ -14,7 +14,7 @@
 ## 2. Folder Structure
 
 ```text
-next-frontend/
+veloxpay/
   app/
     [username]/
       [amount]/

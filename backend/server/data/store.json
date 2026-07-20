@@ -3,6 +3,7 @@
   "wallets": {},
   "txs": [],
   "paymentLinks": [],
+  "smartRequests": [],
   "payments": [],
   "paymentAuthSessions": []
 }
