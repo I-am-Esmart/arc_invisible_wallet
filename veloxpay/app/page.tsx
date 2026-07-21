@@ -20,105 +20,123 @@ function XLogo() {
 
 export default function HomePage() {
   return (
-    <main className="space-y-10 pb-10">
-      <section className="overflow-hidden rounded-[2rem] bg-[radial-gradient(circle_at_top_left,_rgba(37,99,235,0.18),_transparent_28%),linear-gradient(135deg,_#ffffff,_#f8fbff_45%,_#eef5ff)] p-8 shadow-sm ring-1 ring-slate-200 sm:p-12">
-        <div className="grid gap-10 lg:grid-cols-[1.2fr_0.8fr] lg:items-center">
+    <main className="space-y-8 pb-10">
+      <section className="overflow-hidden rounded-[2rem] bg-white p-6 shadow-sm ring-1 ring-slate-200 sm:p-10">
+        <div className="grid gap-8 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
           <div>
             <div className="flex items-center gap-4">
               <VeloxPayLogo className="h-16 w-16" />
-              <p className="inline-flex rounded-full bg-brand-50 px-4 py-1 text-sm font-medium tracking-[0.18em] text-brand-700 uppercase">
-                VeloxPay
+              <p className="inline-flex rounded-full bg-brand-50 px-4 py-1 text-sm font-semibold uppercase text-brand-700">
+                Arc programmable payments
               </p>
             </div>
             <h1 className="mt-5 max-w-3xl text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl">
-              One wallet for sending, receiving, and getting paid by request.
+              VeloxPay Smart Requests
             </h1>
             <p className="mt-5 max-w-2xl text-lg leading-8 text-slate-600">
-              VeloxPay brings your wallet and payment requests into one place. Create or
-              restore your wallet once, send USDC or EURC, receive funds, create a simple
-              invoice-style payment request, and track everything from the same workspace.
+              Payment links that can settle normally, split USDC or EURC across a team,
+              or hold funds in an Arc smart contract until delivery is approved.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <Button asChild>
-                <Link href="/login">Create or restore wallet</Link>
+                <Link href="/dashboard">Create Smart Request</Link>
               </Button>
               <Button asChild variant="secondary">
-                <Link href="/dashboard">Open workspace</Link>
+                <Link href="/login">Create or restore wallet</Link>
               </Button>
             </div>
 
-            <div className="mt-10 flex flex-wrap items-center gap-6 text-sm text-slate-600">
+            <div className="mt-10 grid gap-4 text-sm text-slate-600 sm:grid-cols-3">
               <div>
-                <div className="font-semibold text-slate-900">Wallet built in</div>
-                <div>Create once and use it across every payment flow.</div>
+                <div className="font-semibold text-slate-900">Split payments</div>
+                <div>Allocate up to 10 recipients with exact basis points.</div>
               </div>
               <div>
-                <div className="font-semibold text-slate-900">Invoice-style requests</div>
-                <div>Ask to be paid with one clean link you can send anywhere.</div>
+                <div className="font-semibold text-slate-900">Protected delivery</div>
+                <div>Hold funds until the payer approves the submitted work.</div>
               </div>
               <div>
-                <div className="font-semibold text-slate-900">One clear dashboard</div>
-                <div>See balances, activity, links, and payments together.</div>
+                <div className="font-semibold text-slate-900">Circle + Arc</div>
+                <div>Developer wallets, contract calls, and receipt verification.</div>
               </div>
             </div>
           </div>
 
-          <Card className="border border-white/70 bg-white/85 p-7 backdrop-blur">
+          <div className="rounded-3xl border border-slate-200 bg-slate-950 p-5 text-white shadow-sm">
             <div className="mb-6 flex items-center justify-between gap-4">
-              <VeloxPayLogo className="h-14 w-14" showWordmark textClassName="text-2xl font-semibold tracking-tight text-slate-950" />
-              <div className="rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-brand-700">
-                unified checkout
+              <VeloxPayLogo className="h-12 w-12" showWordmark textClassName="text-xl font-semibold tracking-tight text-white" />
+              <div className="rounded-full bg-emerald-400/15 px-3 py-1 text-xs font-semibold uppercase text-emerald-200">
+                protected
               </div>
             </div>
-            <div className="rounded-2xl bg-slate-950 p-5 text-white">
-              <div className="text-xs uppercase tracking-[0.2em] text-white/70">Example payment link</div>
-              <div className="mt-3 break-all text-lg font-medium">
-                veloxpay.vercel.app/smart/50/9f2c1a4b7d8e6c0f1a2b
+            <div className="rounded-2xl bg-white p-5 text-slate-950">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <div className="text-xs font-semibold uppercase text-slate-500">Agency website build</div>
+                  <div className="mt-2 text-3xl font-semibold">1,000 USDC</div>
+                </div>
+                <div className="rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-700">Arc Testnet</div>
+              </div>
+              <div className="mt-5 space-y-3 text-sm">
+                {[
+                  ["Developer", "60%", "600 USDC"],
+                  ["Designer", "20%", "200 USDC"],
+                  ["Project manager", "10%", "100 USDC"],
+                  ["Agency treasury", "10%", "100 USDC"],
+                ].map(([label, percent, amount]) => (
+                  <div key={label} className="grid grid-cols-[1fr_auto_auto] gap-3 rounded-xl bg-slate-50 px-3 py-2">
+                    <span className="font-medium">{label}</span>
+                    <span className="text-slate-500">{percent}</span>
+                    <span className="font-semibold">{amount}</span>
+                  </div>
+                ))}
               </div>
             </div>
 
-            <div className="mt-6 space-y-5">
-              <div>
-                <div className="text-sm text-slate-500">Inside your workspace</div>
-                <div className="mt-1 text-3xl font-semibold text-slate-950">Wallet + payment requests</div>
+            <div className="mt-5 grid gap-3 text-sm sm:grid-cols-3">
+              <div className="rounded-2xl bg-white/10 p-3">
+                <div className="text-white/55">Step 1</div>
+                <div className="mt-1 font-semibold">Fund request</div>
               </div>
-              <div>
-                <div className="text-sm text-slate-500">What the payer sees</div>
-                <p className="mt-1 text-sm leading-6 text-slate-600">
-                  A clean page showing who they are paying, how much to send, and one clear button to complete the payment.
-                </p>
+              <div className="rounded-2xl bg-white/10 p-3">
+                <div className="text-white/55">Step 2</div>
+                <div className="mt-1 font-semibold">Submit delivery</div>
+              </div>
+              <div className="rounded-2xl bg-white/10 p-3">
+                <div className="text-white/55">Step 3</div>
+                <div className="mt-1 font-semibold">Release split</div>
               </div>
             </div>
-          </Card>
+          </div>
         </div>
       </section>
 
       <section className="grid gap-4 md:grid-cols-3">
         <Card className="bg-white/90">
-          <h2 className="text-lg font-semibold text-slate-900">1. Create your wallet</h2>
+          <h2 className="text-lg font-semibold text-slate-900">1. Create a request</h2>
           <p className="mt-2 text-sm leading-6 text-slate-600">
-            Use your email to create or restore the same wallet every time you come back.
+            Choose standard, split, or protected mode, then add recipients and percentages.
           </p>
         </Card>
         <Card className="bg-white/90">
-          <h2 className="text-lg font-semibold text-slate-900">2. Send, receive, or link</h2>
+          <h2 className="text-lg font-semibold text-slate-900">2. Payer funds on Arc</h2>
           <p className="mt-2 text-sm leading-6 text-slate-600">
-            Use your wallet directly or generate a payment request to collect funds anywhere.
+            VeloxPay checks balance, allowance, Circle transactions, and contract state.
           </p>
         </Card>
         <Card className="bg-white/90">
-          <h2 className="text-lg font-semibold text-slate-900">3. Track everything</h2>
+          <h2 className="text-lg font-semibold text-slate-900">3. Verify the receipt</h2>
           <p className="mt-2 text-sm leading-6 text-slate-600">
-            Watch balances, wallet activity, payment links, and incoming payments from one dashboard.
+            Receipts compare canonical metadata with the onchain Smart Request record.
           </p>
         </Card>
       </section>
 
       <section className="flex flex-col gap-4 rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-xl font-semibold text-slate-900">Built for simple stablecoin payments</h2>
+          <h2 className="text-xl font-semibold text-slate-900">Built for programmable stablecoin work</h2>
           <p className="mt-2 text-sm text-slate-600">
-            VeloxPay keeps wallet setup, payment requests, and checkout inside one clear flow from start to finish.
+            Circle Wallets handle user custody, Circle Contracts routes contract execution, and Arc settles the request.
           </p>
         </div>
         <a
