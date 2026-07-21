@@ -54,10 +54,11 @@ export async function login(email, displayName) {
   return handleResponse(res)
 }
 
-export async function createWallet() {
+export async function createWallet(email) {
   const res = await fetch(`${API_BASE}/create-wallet`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
   })
   return handleResponse(res)
 }

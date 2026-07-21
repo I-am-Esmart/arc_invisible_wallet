@@ -9,7 +9,8 @@ export default function Home() {
   const handleCreateWallet = async () => {
     try {
       setLoading(true)
-      const res = await createWallet()
+      const savedUser = JSON.parse(localStorage.getItem("user"))
+      const res = await createWallet(savedUser?.email)
       setWallet(res)
       const bal = await getBalance(res.address)
       setBalance(bal.balance)

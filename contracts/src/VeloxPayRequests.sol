@@ -133,6 +133,9 @@ contract VeloxPayRequests is Ownable2Step, Pausable, ReentrancyGuard {
     /// @notice Reverts when recipient allocations do not total 10,000 bps.
     error InvalidAllocationTotal(uint256 totalBps);
 
+    /// @notice Reverts when a token transfer into the contract does not deliver the exact requested amount.
+    error UnexpectedTokenBalanceDelta(uint256 expectedAmount, uint256 receivedAmount);
+
     /**
      * @notice Emitted when the owner changes token support.
      * @param token ERC-20 token address.
@@ -375,9 +378,16 @@ contract VeloxPayRequests is Ownable2Step, Pausable, ReentrancyGuard {
             revert RequestExpired(requestId, request.dueAt);
         }
 
+        uint256 balanceBefore = request.token.balanceOf(address(this));
+        request.token.safeTransferFrom(msg.sender, address(this), request.amount);
+        uint256 receivedAmount = request.token.balanceOf(address(this)) - balanceBefore;
+
+        if (receivedAmount != request.amount) {
+            revert UnexpectedTokenBalanceDelta(request.amount, receivedAmount);
+        }
+
         request.payer = msg.sender;
         request.status = PaymentStatus.FUNDED;
-        request.token.safeTransferFrom(msg.sender, address(this), request.amount);
 
         emit RequestFunded(
             requestId, request.externalPaymentId, msg.sender, address(request.token), request.amount, request.mode

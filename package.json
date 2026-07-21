@@ -5,6 +5,7 @@
   "scripts": {
     "app:dev": "npm --prefix veloxpay run dev",
     "app:lint": "npm --prefix veloxpay run lint",
+    "app:test": "npm --prefix veloxpay run test",
     "app:build": "npm --prefix veloxpay run build",
     "backend:dev": "npm --prefix backend/server run dev",
     "backend:start": "npm --prefix backend/server run start",
@@ -18,6 +19,7 @@
     "contracts:fmt:check": "forge fmt --check --root contracts",
     "contracts:clean": "forge clean --root contracts",
     "contracts:artifacts": "node contracts/deploy/extract-veloxpay-artifact.mjs",
-    "contracts:deploy:arc-testnet": "node --env-file-if-exists=contracts/.env contracts/deploy/deploy-arc-testnet.mjs"
+    "contracts:deploy:arc-testnet": "node --env-file-if-exists=contracts/.env contracts/deploy/deploy-arc-testnet.mjs",
+    "demo:seed:agency": "node scripts/seed-agency-smart-request-demo.mjs"
   }
 }

@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { PaymentLinkCard } from "@/components/payment/payment-link-card";
 import { getPaymentLinkByRoute } from "@/lib/api/payment-links";
+import { getSmartRequestByPaymentLinkId } from "@/lib/api/smart-requests";
 import { payForPaymentLink } from "../actions";
 
 type PaymentLinkPageProps = {
@@ -23,12 +24,16 @@ export default async function PaymentLinkWithCodePage({ params, searchParams }: 
   if (!paymentLink) {
     notFound();
   }
+  const smartRequest = await getSmartRequestByPaymentLinkId(paymentLink.id)
+    .then((response) => response.smartRequest)
+    .catch(() => null);
 
   return (
     <main className="mx-auto max-w-2xl">
       <PaymentLinkCard
         paymentLink={paymentLink}
         payAction={payForPaymentLink.bind(null, paymentLink.linkCode || paymentLink.id)}
+        smartRequest={smartRequest}
       />
     </main>
   );

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { API_BASE, fetchBalances } from "../lib/api"
+import { API_BASE, fetchBalances, createWallet } from "../lib/api"
 import { Link, useLocation, useNavigate } from "react-router-dom"
 import FaucetInstructionsModal from "../components/FaucetInstructionsModal"
 import { TOKEN_OPTIONS } from "../lib/tokens"
@@ -21,6 +21,8 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [showFaucetModal, setShowFaucetModal] = useState(false)
+  const [creatingCircleWallet, setCreatingCircleWallet] = useState(false)
+  const [circleWalletError, setCircleWalletError] = useState("")
 
   function handleLogout() {
     localStorage.removeItem("user")
@@ -53,6 +55,28 @@ export default function Dashboard() {
 
     load()
   }, [user])
+
+  async function handleCreateCircleWallet() {
+    if (!user?.email) {
+      setCircleWalletError("Email is required to create a Circle wallet.")
+      return
+    }
+
+    setCreatingCircleWallet(true)
+    setCircleWalletError("")
+
+    try {
+      const data = await createWallet(user.email)
+      const updatedUser = { ...user, ...data }
+      localStorage.setItem("user", JSON.stringify(updatedUser))
+      setWallet(await fetchBalances(updatedUser.address))
+      window.location.reload()
+    } catch (err) {
+      setCircleWalletError(err.message || "Failed to create Circle wallet")
+    } finally {
+      setCreatingCircleWallet(false)
+    }
+  }
 
   if (!user || loading) {
     return <div className="p-6 text-gray-500">Loading wallet...</div>
@@ -106,6 +130,35 @@ export default function Dashboard() {
         <div className="font-mono text-sm break-all mb-4">
           {user.address}
         </div>
+
+        {user.walletId ? (
+          <div className="text-sm text-gray-500 mb-3">
+            <div>
+              <span className="font-medium">Circle wallet ID:</span> {user.walletId}
+            </div>
+            <div>
+              <span className="font-medium">Blockchain:</span> {user.blockchain || "ARC-TESTNET"}
+            </div>
+          </div>
+        ) : (
+          <div className="rounded-2xl bg-yellow-50 border border-yellow-200 p-4 mb-4">
+            <p className="text-sm font-medium text-yellow-800">No Circle wallet assigned yet.</p>
+            <p className="text-sm text-yellow-700 mt-1">
+              Click below to create a Circle wallet for gasless transfers.
+            </p>
+            <button
+              type="button"
+              onClick={handleCreateCircleWallet}
+              disabled={creatingCircleWallet}
+              className="mt-4 w-full bg-yellow-600 text-white py-3 rounded-xl hover:bg-yellow-700 transition disabled:opacity-50"
+            >
+              {creatingCircleWallet ? "Creating wallet..." : "Create Circle Wallet"}
+            </button>
+            {circleWalletError && (
+              <div className="mt-3 text-sm text-red-600">{circleWalletError}</div>
+            )}
+          </div>
+        )}
 
         <div className="text-sm text-gray-500 mb-3 mt-4">Balances</div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">

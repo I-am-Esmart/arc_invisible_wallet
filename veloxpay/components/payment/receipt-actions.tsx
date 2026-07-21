@@ -20,7 +20,7 @@ export function ReceiptActions({
   }
 
   return (
-    <div className="flex flex-wrap gap-3">
+    <div className="flex flex-wrap gap-3 print:hidden">
       <button
         type="button"
         onClick={() => window.print()}

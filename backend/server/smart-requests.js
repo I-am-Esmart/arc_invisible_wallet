@@ -99,6 +99,7 @@ function normalizeSmartRequest(input, options = {}) {
     creatorWalletId: metadata.creatorWalletId,
     creatorWalletAddress,
     expectedPayerEmail: metadata.expectedPayerEmail,
+    actualPayerEmail: normalizeEmail(input.actualPayerEmail),
     actualPayerWalletId: optionalString(input.actualPayerWalletId),
     actualPayerWalletAddress: input.actualPayerWalletAddress
       ? requireAddress(input.actualPayerWalletAddress, "Actual payer wallet address")
@@ -109,13 +110,19 @@ function normalizeSmartRequest(input, options = {}) {
     refundEligibilityDate,
     metadataHash,
     deliverableUrl: optionalString(input.deliverableUrl),
+    deliverableNote: optionalString(input.deliverableNote),
+    deliverableSubmittedAt: input.deliverableSubmittedAt ? normalizeIsoDate(input.deliverableSubmittedAt, "Deliverable submitted timestamp") : "",
+    deliverableRecordHash: input.deliverableRecordHash ? requireBytes32(input.deliverableRecordHash, "Deliverable record hash") : "",
     deliverableHash: input.deliverableHash ? requireBytes32(input.deliverableHash, "Deliverable hash") : "",
+    deliverableTransactionId: optionalString(input.deliverableTransactionId),
+    deliverableTransactionHash: optionalTxHash(input.deliverableTransactionHash, "Deliverable transaction hash"),
     fundingTransactionId: optionalString(input.fundingTransactionId),
     fundingTransactionHash: optionalTxHash(input.fundingTransactionHash, "Funding transaction hash"),
     releaseTransactionId: optionalString(input.releaseTransactionId),
     releaseTransactionHash: optionalTxHash(input.releaseTransactionHash, "Release transaction hash"),
     refundTransactionId: optionalString(input.refundTransactionId),
     refundTransactionHash: optionalTxHash(input.refundTransactionHash, "Refund transaction hash"),
+    bridge: normalizeBridgeRecord(input.bridge),
     offchainStatus: normalizeEnum(input.offchainStatus || "open", OFFCHAIN_STATUSES, "Offchain status"),
     onchainStatus: normalizeEnum(input.onchainStatus || "not_created", ONCHAIN_STATUSES, "Onchain status"),
     createdAt,
@@ -235,6 +242,16 @@ function createSmartRequestRepository({ store, writeStore, getPersistentJson, se
         getPersistentJson,
         setPersistentJson
       });
+
+      const payerEmail = normalized.actualPayerEmail || normalized.expectedPayerEmail;
+      if (payerEmail) {
+        await savePersistentSmartRequestIndex({
+          key: smartRequestsPayerKey(payerEmail),
+          smartRequest: normalized,
+          getPersistentJson,
+          setPersistentJson
+        });
+      }
     }
 
     if (typeof writeStore === "function") {
@@ -329,6 +346,26 @@ function createSmartRequestRepository({ store, writeStore, getPersistentJson, se
       .map(deserializeSmartRequest);
   }
 
+  async function listByPayerEmail(payerEmail) {
+    const normalizedPayerEmail = normalizeEmail(payerEmail);
+
+    if (!normalizedPayerEmail) {
+      throw new Error("Payer email is required");
+    }
+
+    if (typeof getPersistentJson === "function") {
+      const stored = await getPersistentJson(smartRequestsPayerKey(normalizedPayerEmail));
+      if (Array.isArray(stored)) {
+        return stored.map(deserializeSmartRequest);
+      }
+    }
+
+    return localStore.smartRequests
+      .filter((entry) => entry.actualPayerEmail === normalizedPayerEmail || entry.expectedPayerEmail === normalizedPayerEmail)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .map(deserializeSmartRequest);
+  }
+
   async function getPersistentSmartRequestById(id) {
     if (typeof getPersistentJson !== "function") {
       return null;
@@ -344,7 +381,8 @@ function createSmartRequestRepository({ store, writeStore, getPersistentJson, se
     getByExternalPaymentId,
     getByOnchainRequest,
     getByPaymentLinkId,
-    listByCreatorUserId
+    listByCreatorUserId,
+    listByPayerEmail
   };
 }
 
@@ -379,6 +417,10 @@ function smartRequestOnchainKey(chain, contractAddress, onchainRequestId) {
 
 function smartRequestsCreatorKey(creatorUserId) {
   return `veloxpay:smart-requests:creator:${String(creatorUserId || "").trim().toLowerCase()}`;
+}
+
+function smartRequestsPayerKey(payerEmail) {
+  return `veloxpay:smart-requests:payer:${normalizeEmail(payerEmail)}`;
 }
 
 function normalizeRecipients(recipients, { amountBaseUnits, decimals, mode }) {
@@ -493,6 +535,136 @@ function buildExternalPaymentId(id) {
   return `0x${crypto.createHash("sha256").update(String(id), "utf8").digest("hex")}`;
 }
 
+function buildDeliverableRecord({ smartRequest, deliverableUrl, note, submittedBy, submittedAt }) {
+  assertRecord(smartRequest, "Smart request");
+
+  return canonicalize({
+    type: "veloxpay.protected-deliverable.v1",
+    smartRequestId: nonEmptyString(smartRequest.id, "Smart request ID"),
+    paymentLinkId: optionalString(smartRequest.paymentLinkId),
+    onchainRequestId: normalizeOnchainRequestId(smartRequest.onchainRequestId),
+    externalPaymentId: requireBytes32(smartRequest.externalPaymentId, "External payment ID"),
+    contractAddress: requireAddress(smartRequest.contractAddress, "Contract address"),
+    chain: nonEmptyString(smartRequest.chain || DEFAULT_CHAIN, "Chain"),
+    deliverableUrl: nonEmptyString(deliverableUrl, "Deliverable URL"),
+    note: optionalString(note),
+    submittedBy: normalizeEmail(submittedBy),
+    submittedAt: normalizeIsoDate(submittedAt || new Date().toISOString(), "Deliverable submitted timestamp")
+  });
+}
+
+function hashDeliverableRecord(record) {
+  return hashCanonicalJson(record);
+}
+
+function canSubmitProtectedDeliverable(smartRequest, actorEmail) {
+  const actor = normalizeEmail(actorEmail);
+
+  return Boolean(
+    smartRequest?.mode === "protected" &&
+    actor &&
+    normalizeEmail(smartRequest.creatorUserId) === actor &&
+    smartRequest.offchainStatus === "funded" &&
+    smartRequest.onchainStatus === "funded" &&
+    !smartRequest.deliverableHash
+  );
+}
+
+function canApproveProtectedRelease(smartRequest, actorEmail) {
+  const actor = normalizeEmail(actorEmail);
+
+  return Boolean(
+    smartRequest?.mode === "protected" &&
+    actor &&
+    (normalizeEmail(smartRequest.expectedPayerEmail) === actor || normalizeEmail(smartRequest.actualPayerEmail) === actor) &&
+    smartRequest.offchainStatus === "submitted" &&
+    smartRequest.onchainStatus === "submitted" &&
+    smartRequest.deliverableHash
+  );
+}
+
+function canClaimExpiredProtectedRefund(smartRequest, actorEmail, now = new Date()) {
+  const actor = normalizeEmail(actorEmail);
+  const dueAt = smartRequest?.dueDate ? new Date(smartRequest.dueDate).getTime() : Number.NaN;
+
+  return Boolean(
+    smartRequest?.mode === "protected" &&
+    actor &&
+    (normalizeEmail(smartRequest.expectedPayerEmail) === actor || normalizeEmail(smartRequest.actualPayerEmail) === actor) &&
+    smartRequest.offchainStatus === "funded" &&
+    smartRequest.onchainStatus === "funded" &&
+    !smartRequest.deliverableHash &&
+    !Number.isNaN(dueAt) &&
+    dueAt <= new Date(now).getTime()
+  );
+}
+
+function canPayerAccessSmartRequest(smartRequest, payerEmail) {
+  const normalizedPayerEmail = normalizeEmail(payerEmail);
+  const expectedPayerEmail = normalizeEmail(smartRequest?.expectedPayerEmail);
+  const actualPayerEmail = normalizeEmail(smartRequest?.actualPayerEmail);
+
+  return Boolean(
+    normalizedPayerEmail &&
+    (!expectedPayerEmail || expectedPayerEmail === normalizedPayerEmail) &&
+    (!actualPayerEmail || actualPayerEmail === normalizedPayerEmail)
+  );
+}
+
+function buildSmartRequestTimeline(smartRequest) {
+  const timeline = [
+    {
+      id: `${smartRequest.id}:created`,
+      status: "sent",
+      label: "Smart Request created",
+      details: `${smartRequest.amount} ${smartRequest.currency}`,
+      at: smartRequest.createdAt
+    }
+  ];
+
+  if (smartRequest.fundingTransactionId || smartRequest.fundingTransactionHash || ["funded", "submitted", "settled"].includes(smartRequest.offchainStatus)) {
+    timeline.push({
+      id: `${smartRequest.id}:funded`,
+      status: "paid",
+      label: "Protected payment funded",
+      details: smartRequest.fundingTransactionHash || smartRequest.fundingTransactionId || "",
+      at: smartRequest.updatedAt || smartRequest.createdAt
+    });
+  }
+
+  if (smartRequest.deliverableHash) {
+    timeline.push({
+      id: `${smartRequest.id}:submitted`,
+      status: "paid",
+      label: "Deliverable submitted",
+      details: smartRequest.deliverableTransactionHash || smartRequest.deliverableUrl || smartRequest.deliverableHash,
+      at: smartRequest.deliverableSubmittedAt || smartRequest.updatedAt
+    });
+  }
+
+  if (smartRequest.releaseTransactionHash || smartRequest.offchainStatus === "settled") {
+    timeline.push({
+      id: `${smartRequest.id}:settled`,
+      status: "paid",
+      label: "Payment released",
+      details: smartRequest.releaseTransactionHash || smartRequest.releaseTransactionId || "",
+      at: smartRequest.updatedAt
+    });
+  }
+
+  if (smartRequest.refundTransactionHash || smartRequest.offchainStatus === "refunded") {
+    timeline.push({
+      id: `${smartRequest.id}:refunded`,
+      status: "failed",
+      label: "Payment refunded",
+      details: smartRequest.refundTransactionHash || smartRequest.refundTransactionId || "",
+      at: smartRequest.updatedAt
+    });
+  }
+
+  return timeline.filter((event) => event.at);
+}
+
 function normalizePaymentMode(value) {
   const mode = String(value || "").trim().toLowerCase();
 
@@ -582,6 +754,96 @@ function normalizeEnum(value, allowed, label) {
   }
 
   return normalized;
+}
+
+function normalizeBridgeRecord(value) {
+  if (!value) {
+    return null;
+  }
+
+  assertRecord(value, "Smart request bridge");
+
+  const token = String(value.token || "USDC").trim().toUpperCase();
+  const sourceChain = optionalString(value.sourceChain || "Ethereum_Sepolia");
+  const destinationChain = optionalString(value.destinationChain || "Arc_Testnet");
+
+  if (token !== "USDC") {
+    throw new Error("Smart Request bridge token must be USDC");
+  }
+
+  if (sourceChain !== "Ethereum_Sepolia" || destinationChain !== "Arc_Testnet") {
+    throw new Error("Smart Request bridge route must be Ethereum Sepolia to Arc Testnet");
+  }
+
+  return {
+    id: optionalString(value.id),
+    sourceNetwork: optionalString(value.sourceNetwork || "Ethereum Sepolia"),
+    sourceChain,
+    destinationNetwork: optionalString(value.destinationNetwork || "Arc Testnet"),
+    destinationChain,
+    token,
+    sourceAmount: optionalString(value.sourceAmount),
+    expectedReceivedAmount: optionalString(value.expectedReceivedAmount),
+    status: normalizeBridgeStatus(value.status),
+    provider: optionalString(value.provider),
+    quote: value.quote && typeof value.quote === "object" && !Array.isArray(value.quote) ? value.quote : null,
+    steps: Array.isArray(value.steps) ? value.steps.map(normalizeBridgeStep) : [],
+    events: Array.isArray(value.events) ? value.events.map(normalizeBridgeEvent) : [],
+    sourceExplorerBaseUrl: optionalString(value.sourceExplorerBaseUrl),
+    destinationExplorerBaseUrl: optionalString(value.destinationExplorerBaseUrl),
+    error: normalizeErrorInfo(value.error),
+    createdAt: value.createdAt ? normalizeIsoDate(value.createdAt, "Bridge created timestamp") : "",
+    updatedAt: value.updatedAt ? normalizeIsoDate(value.updatedAt, "Bridge updated timestamp") : ""
+  };
+}
+
+function normalizeBridgeStatus(value) {
+  const status = String(value || "pending").trim().toLowerCase();
+
+  if (!["pending", "success", "error", "recovery_required"].includes(status)) {
+    throw new Error("Bridge status is not supported");
+  }
+
+  return status;
+}
+
+function normalizeBridgeStep(step) {
+  assertRecord(step, "Bridge step");
+
+  return {
+    name: optionalString(step.name),
+    status: normalizeBridgeStepStatus(step.status || step.state),
+    chain: optionalString(step.chain),
+    txHash: optionalTxHash(step.txHash, "Bridge transaction hash"),
+    explorerUrl: optionalString(step.explorerUrl),
+    forwarded: Boolean(step.forwarded),
+    batched: Boolean(step.batched),
+    batchId: optionalString(step.batchId),
+    error: normalizeErrorInfo(step.error)
+  };
+}
+
+function normalizeBridgeEvent(event) {
+  assertRecord(event, "Bridge event");
+
+  return {
+    method: optionalString(event.method),
+    status: normalizeBridgeStepStatus(event.status || event.state),
+    chain: optionalString(event.chain),
+    txHash: optionalTxHash(event.txHash, "Bridge event transaction hash"),
+    explorerUrl: optionalString(event.explorerUrl),
+    at: event.at ? normalizeIsoDate(event.at, "Bridge event timestamp") : ""
+  };
+}
+
+function normalizeBridgeStepStatus(value) {
+  const status = String(value || "pending").trim().toLowerCase();
+
+  if (!["pending", "success", "error"].includes(status)) {
+    return "pending";
+  }
+
+  return status;
 }
 
 function normalizeEmail(value) {
@@ -702,13 +964,20 @@ module.exports = {
   DEFAULT_CHAIN,
   MAX_RECIPIENTS,
   buildExternalPaymentId,
+  buildDeliverableRecord,
+  buildSmartRequestTimeline,
   buildSmartRequestFromPaymentLink,
   buildSmartRequestMetadata,
+  canApproveProtectedRelease,
+  canClaimExpiredProtectedRefund,
+  canPayerAccessSmartRequest,
+  canSubmitProtectedDeliverable,
   calculateRecipientAmounts,
   canonicalJson,
   createSmartRequestRepository,
   deserializeSmartRequest,
   formatBaseUnits,
+  hashDeliverableRecord,
   hashCanonicalJson,
   normalizeSmartRequest,
   parseTokenAmountToBaseUnits,
@@ -717,5 +986,6 @@ module.exports = {
   smartRequestKey,
   smartRequestOnchainKey,
   smartRequestPaymentLinkKey,
-  smartRequestsCreatorKey
+  smartRequestsCreatorKey,
+  smartRequestsPayerKey
 };

@@ -8,6 +8,9 @@ const compat = new FlatCompat({
 });
 
 const eslintConfig = [
+  {
+    ignores: ["**/*.test.cjs", "**/*.test.ts", "**/*.test.tsx", "test/**/*.ts"],
+  },
   ...compat.extends("next/core-web-vitals", "next/typescript")
 ];
 

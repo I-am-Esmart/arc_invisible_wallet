@@ -29,6 +29,8 @@ export type PaymentLink = {
   recurrence?: PaymentRecurrence;
   customerEmail?: string;
   customerName?: string;
+  smartRequestId?: string;
+  paymentMode?: "standard" | "split" | "protected";
   openedCount?: number;
   lastPaidAt?: string;
   timeline?: PaymentTimelineEvent[];

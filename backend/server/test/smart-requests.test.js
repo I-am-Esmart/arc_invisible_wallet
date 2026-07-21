@@ -1,10 +1,17 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 const {
+  buildDeliverableRecord,
+  buildSmartRequestTimeline,
   buildSmartRequestFromPaymentLink,
+  canApproveProtectedRelease,
+  canClaimExpiredProtectedRefund,
+  canPayerAccessSmartRequest,
+  canSubmitProtectedDeliverable,
   calculateRecipientAmounts,
   canonicalJson,
   createSmartRequestRepository,
+  hashDeliverableRecord,
   hashCanonicalJson,
   normalizeSmartRequest,
   parseTokenAmountToBaseUnits,
@@ -13,7 +20,8 @@ const {
   smartRequestKey,
   smartRequestOnchainKey,
   smartRequestPaymentLinkKey,
-  smartRequestsCreatorKey
+  smartRequestsCreatorKey,
+  smartRequestsPayerKey
 } = require("../smart-requests");
 
 const OWNER = "0x1111111111111111111111111111111111111111";
@@ -40,6 +48,7 @@ function baseInput(overrides = {}) {
     creatorWalletId: "wallet-creator",
     creatorWalletAddress: OWNER,
     expectedPayerEmail: "payer@example.com",
+    actualPayerEmail: "payer@example.com",
     actualPayerWalletId: "wallet-payer",
     actualPayerWalletAddress: PAYER,
     recipients: [
@@ -80,6 +89,7 @@ test("validates and normalizes a complete SmartRequest model", () => {
   assert.equal(smartRequest.creatorWalletId, "wallet-creator");
   assert.equal(smartRequest.creatorWalletAddress, OWNER);
   assert.equal(smartRequest.expectedPayerEmail, "payer@example.com");
+  assert.equal(smartRequest.actualPayerEmail, "payer@example.com");
   assert.equal(smartRequest.actualPayerWalletId, "wallet-payer");
   assert.equal(smartRequest.actualPayerWalletAddress, PAYER);
   assert.equal(smartRequest.recipients[0].amountBaseUnits, "60150000");
@@ -178,6 +188,57 @@ test("serializes and deserializes as validated plain JSON", () => {
   assert.deepEqual(roundTrip, serialized);
 });
 
+test("persists bridge quote, steps, hashes, and recovery state", () => {
+  const smartRequest = normalizeSmartRequest(
+    baseInput({
+      bridge: {
+        id: "bridge-1",
+        sourceNetwork: "Ethereum Sepolia",
+        sourceChain: "Ethereum_Sepolia",
+        destinationNetwork: "Arc Testnet",
+        destinationChain: "Arc_Testnet",
+        token: "USDC",
+        sourceAmount: "100",
+        expectedReceivedAmount: "99.99",
+        status: "recovery_required",
+        provider: "cctp-v2",
+        quote: {
+          fees: [{ type: "provider", token: "USDC", amount: "0.01" }],
+          gasFees: [{ name: "Burn gas", token: "ETH", blockchain: "Ethereum Sepolia", fee: "1000" }]
+        },
+        steps: [
+          {
+            name: "Burn",
+            status: "success",
+            chain: "Ethereum_Sepolia",
+            txHash: "0x".padEnd(66, "a"),
+            explorerUrl: "https://sepolia.etherscan.io/tx/0xaaa"
+          },
+          {
+            name: "Mint",
+            status: "error",
+            chain: "Arc_Testnet",
+            txHash: "0x".padEnd(66, "b"),
+            explorerUrl: "https://testnet.arcscan.app/tx/0xbbb"
+          }
+        ],
+        error: { code: "mint_error", message: "Mint needs recovery", at: NOW },
+        createdAt: NOW,
+        updatedAt: NOW
+      }
+    }),
+    { now: NOW }
+  );
+
+  const roundTrip = serializeSmartRequest(JSON.parse(JSON.stringify(smartRequest)));
+
+  assert.equal(roundTrip.bridge.status, "recovery_required");
+  assert.equal(roundTrip.bridge.quote.fees[0].amount, "0.01");
+  assert.equal(roundTrip.bridge.steps[0].txHash, "0x".padEnd(66, "a").toLowerCase());
+  assert.equal(roundTrip.bridge.steps[1].chain, "Arc_Testnet");
+  assert.equal(roundTrip.bridge.error.message, "Mint needs recovery");
+});
+
 test("repository saves locally and through persistent JSON helpers without direct Redis use", async () => {
   const persisted = new Map();
   const store = { smartRequests: [] };
@@ -203,6 +264,7 @@ test("repository saves locally and through persistent JSON helpers without direc
   );
   assert.deepEqual(await repository.getByPaymentLinkId("link-1"), smartRequest);
   assert.deepEqual(await repository.listByCreatorUserId("creator@example.com"), [smartRequest]);
+  assert.deepEqual(await repository.listByPayerEmail("payer@example.com"), [smartRequest]);
   assert.deepEqual(persisted.get(smartRequestKey(smartRequest.id)), smartRequest);
   assert.equal(persisted.get(smartRequestExternalKey(smartRequest.externalPaymentId)), smartRequest.id);
   assert.equal(
@@ -211,6 +273,110 @@ test("repository saves locally and through persistent JSON helpers without direc
   );
   assert.equal(persisted.get(smartRequestPaymentLinkKey("link-1")), smartRequest.id);
   assert.deepEqual(persisted.get(smartRequestsCreatorKey("creator@example.com")), [smartRequest]);
+  assert.deepEqual(persisted.get(smartRequestsPayerKey("payer@example.com")), [smartRequest]);
+});
+
+test("protected request permissions follow role and status transitions", () => {
+  const funded = normalizeSmartRequest(
+    baseInput({
+      mode: "protected",
+      offchainStatus: "funded",
+      onchainStatus: "funded",
+      recipients: [{ walletAddress: RECIPIENT_A, allocationBps: 10_000 }]
+    }),
+    { now: NOW }
+  );
+  const submitted = normalizeSmartRequest(
+    {
+      ...funded,
+      offchainStatus: "submitted",
+      onchainStatus: "submitted",
+      deliverableUrl: "https://example.com/delivery",
+      deliverableSubmittedAt: NOW,
+      deliverableHash: "0x".padEnd(66, "a")
+    },
+    { now: NOW }
+  );
+  const expiredFunded = normalizeSmartRequest(
+    {
+      ...funded,
+      dueDate: "2026-07-01T00:00:00.000Z"
+    },
+    { now: NOW }
+  );
+
+  assert.equal(canSubmitProtectedDeliverable(funded, "creator@example.com"), true);
+  assert.equal(canSubmitProtectedDeliverable(funded, "payer@example.com"), false);
+  assert.equal(canSubmitProtectedDeliverable(submitted, "creator@example.com"), false);
+  assert.equal(canApproveProtectedRelease(submitted, "payer@example.com"), true);
+  assert.equal(canApproveProtectedRelease(submitted, "creator@example.com"), false);
+  assert.equal(canApproveProtectedRelease(funded, "payer@example.com"), false);
+  assert.equal(canClaimExpiredProtectedRefund(expiredFunded, "payer@example.com", NOW), true);
+  assert.equal(canClaimExpiredProtectedRefund(submitted, "payer@example.com", "2026-09-01T00:00:00.000Z"), false);
+});
+
+test("payer access is bound to expected and already verified payer emails", () => {
+  const unverified = normalizeSmartRequest(
+    baseInput({
+      actualPayerEmail: "",
+      actualPayerWalletId: "",
+      actualPayerWalletAddress: ""
+    }),
+    { now: NOW }
+  );
+  const verified = normalizeSmartRequest(baseInput(), { now: NOW });
+
+  assert.equal(canPayerAccessSmartRequest(unverified, "payer@example.com"), true);
+  assert.equal(canPayerAccessSmartRequest(unverified, "PAYER@EXAMPLE.COM"), true);
+  assert.equal(canPayerAccessSmartRequest(unverified, "attacker@example.com"), false);
+  assert.equal(canPayerAccessSmartRequest(verified, "payer@example.com"), true);
+  assert.equal(canPayerAccessSmartRequest(verified, "other@example.com"), false);
+});
+
+test("canonical deliverable records hash stably and timeline reflects protected transitions", () => {
+  const smartRequest = normalizeSmartRequest(
+    baseInput({
+      mode: "protected",
+      offchainStatus: "funded",
+      onchainStatus: "funded",
+      recipients: [{ walletAddress: RECIPIENT_A, allocationBps: 10_000 }]
+    }),
+    { now: NOW }
+  );
+  const left = buildDeliverableRecord({
+    smartRequest,
+    deliverableUrl: "https://example.com/final",
+    note: "Delivered final assets",
+    submittedBy: "creator@example.com",
+    submittedAt: NOW
+  });
+  const right = buildDeliverableRecord({
+    smartRequest: { ...smartRequest },
+    submittedAt: NOW,
+    submittedBy: "creator@example.com",
+    note: "Delivered final assets",
+    deliverableUrl: "https://example.com/final"
+  });
+  const deliverableHash = hashDeliverableRecord(left);
+  const submitted = normalizeSmartRequest(
+    {
+      ...smartRequest,
+      deliverableUrl: "https://example.com/final",
+      deliverableNote: "Delivered final assets",
+      deliverableSubmittedAt: NOW,
+      deliverableRecordHash: deliverableHash,
+      deliverableHash,
+      deliverableTransactionHash: "0x".padEnd(66, "b"),
+      offchainStatus: "submitted",
+      onchainStatus: "submitted"
+    },
+    { now: NOW }
+  );
+  const timeline = buildSmartRequestTimeline(submitted);
+
+  assert.deepEqual(left, right);
+  assert.match(deliverableHash, /^0x[a-f0-9]{64}$/);
+  assert.equal(timeline.some((event) => event.label === "Deliverable submitted"), true);
 });
 
 test("builds a backward-compatible SmartRequest from an existing payment link", () => {

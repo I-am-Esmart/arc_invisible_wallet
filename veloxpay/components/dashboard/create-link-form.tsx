@@ -1,21 +1,61 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import type { FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { createPaymentLinkAction, type CreateLinkActionState } from "@/app/create/actions";
+import { createPaymentLink } from "@/lib/api/payment-links";
+import { createSmartRequest } from "@/lib/api/smart-requests";
+import {
+  SMART_REQUEST_MAX_RECIPIENTS,
+  calculateSmartRequestRecipients,
+  validateSmartRequestDraft,
+  type SmartRequestMode,
+  type SmartRequestRecipientDraft,
+} from "@/lib/smart-requests/validation";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Field } from "@/components/ui/field";
 import { upsertStoredPaymentLink } from "@/lib/session/payment-links";
 import type { SavedCustomer } from "@/lib/types/customer";
+import type { PaymentCurrency, PaymentLink } from "@/lib/types/payment-link";
+import type { SmartRequestResponse } from "@/lib/types/smart-request";
 import type { WalletUser } from "@/lib/types/wallet";
 
-const initialState: CreateLinkActionState = {
-  status: "idle",
+type CreateState = {
+  status: "idle" | "success" | "error";
+  message?: string;
+  url?: string;
+  paymentLink?: PaymentLink;
+  smartRequest?: SmartRequestResponse["smartRequest"];
 };
 
 const OWNER_EMAIL_KEY = "veloxpay_owner_email";
 const OWNER_NAME_KEY = "veloxpay_owner_name";
+const DEFAULT_RECIPIENT_ID = "recipient-1";
+
+function createRecipient(overrides: Partial<SmartRequestRecipientDraft> = {}): SmartRequestRecipientDraft {
+  return {
+    id: crypto.randomUUID(),
+    name: "",
+    role: "",
+    email: "",
+    walletAddress: "",
+    percentage: "100",
+    ...overrides,
+  };
+}
+
+function contractBehaviourForMode(mode: SmartRequestMode) {
+  if (mode === "protected") {
+    return "Funds are held by the Arc smart contract until the payer approves release after delivery, or until an eligible refund path is used.";
+  }
+
+  if (mode === "split") {
+    return "Funds are distributed by the Arc smart contract to each recipient according to the allocation percentages.";
+  }
+
+  return "Funds settle as a normal VeloxPay payment request to one recipient.";
+}
 
 export function CreateLinkForm({
   compact = false,
@@ -26,16 +66,27 @@ export function CreateLinkForm({
   compact?: boolean;
   walletUser?: WalletUser | null;
   customers?: SavedCustomer[];
-  onCreated?: (paymentLink?: CreateLinkActionState["paymentLink"]) => void;
+  onCreated?: (paymentLink?: PaymentLink) => void;
 }) {
   const router = useRouter();
-  const [state, formAction, isPending] = useActionState(createPaymentLinkAction, initialState);
+  const [state, setState] = useState<CreateState>({ status: "idle" });
+  const [isPending, setIsPending] = useState(false);
+  const [isReviewing, setIsReviewing] = useState(false);
   const [ownerEmail, setOwnerEmail] = useState("");
   const [ownerName, setOwnerName] = useState("");
-  const [currency, setCurrency] = useState("USDC");
+  const [amount, setAmount] = useState("");
+  const [currency, setCurrency] = useState<PaymentCurrency>("USDC");
+  const [description, setDescription] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
   const [customerName, setCustomerName] = useState("");
   const [recurrence, setRecurrence] = useState("one-time");
+  const [paymentMode, setPaymentMode] = useState<SmartRequestMode>("standard");
+  const [deliverableDescription, setDeliverableDescription] = useState("");
+  const [dueDate, setDueDate] = useState("");
+  const [refundEligibilityDate, setRefundEligibilityDate] = useState("");
+  const [recipients, setRecipients] = useState<SmartRequestRecipientDraft[]>([
+    createRecipient({ id: DEFAULT_RECIPIENT_ID }),
+  ]);
   const [copied, setCopied] = useState(false);
 
   function syncOwnerCookies(email: string, name: string) {
@@ -52,6 +103,17 @@ export function CreateLinkForm({
       const nextName = walletUser.displayName || "";
       setOwnerEmail(walletUser.email);
       setOwnerName(nextName);
+      setRecipients((current) => [
+        {
+          ...current[0],
+          name: nextName || walletUser.email,
+          role: "Creator",
+          email: walletUser.email,
+          walletAddress: walletUser.address || current[0]?.walletAddress || "",
+          percentage: current[0]?.percentage || "100",
+        },
+        ...current.slice(1),
+      ]);
       localStorage.setItem(OWNER_EMAIL_KEY, walletUser.email);
       localStorage.setItem(OWNER_NAME_KEY, nextName);
       syncOwnerCookies(walletUser.email, nextName);
@@ -75,24 +137,86 @@ export function CreateLinkForm({
   }, [compact, router, walletUser]);
 
   useEffect(() => {
-    if (state.status === "success") {
-      if (ownerEmail) {
-        localStorage.setItem(OWNER_EMAIL_KEY, ownerEmail);
-        syncOwnerCookies(ownerEmail, ownerName);
-        if (state.paymentLink) {
-          upsertStoredPaymentLink(ownerEmail, state.paymentLink);
-        }
-      }
-
-      if (ownerName) {
-        localStorage.setItem(OWNER_NAME_KEY, ownerName);
-      }
-
-      setCopied(false);
-      router.refresh();
-      onCreated?.(state.paymentLink);
+    if (paymentMode === "standard") {
+      setRecipients((current) => [
+        {
+          ...(current[0] || createRecipient()),
+          percentage: "100",
+        },
+      ]);
+      return;
     }
-  }, [compact, onCreated, ownerEmail, ownerName, router, state.paymentLink, state.status]);
+
+    setRecipients((current) => {
+      if (current.length > 1) {
+        return current;
+      }
+
+      return [
+        {
+          ...current[0],
+          percentage: "50",
+        },
+        createRecipient({ percentage: "50" }),
+      ];
+    });
+  }, [paymentMode]);
+
+  const allocation = useMemo(() => {
+    try {
+      return {
+        error: "",
+        value: calculateSmartRequestRecipients({ amount: amount || "0", currency, recipients }),
+      };
+    } catch (error) {
+      return {
+        error: error instanceof Error ? error.message : "Unable to calculate allocations.",
+        value: null,
+      };
+    }
+  }, [amount, currency, recipients]);
+
+  const calculatedRecipients = allocation.value?.recipients || recipients.map((recipient) => ({
+    ...recipient,
+    allocationBps: 0,
+    amount: "0",
+    amountBaseUnits: "0",
+  }));
+  const allocationTotal = allocation.value?.totalPercentage || "0";
+  const canSubmit = Boolean(ownerEmail && amount && !allocation.error && allocation.value?.isFullyAllocated);
+
+  function updateRecipient(id: string, patch: Partial<SmartRequestRecipientDraft>) {
+    setRecipients((current) => current.map((recipient) => (recipient.id === id ? { ...recipient, ...patch } : recipient)));
+    setIsReviewing(false);
+  }
+
+  function addRecipient() {
+    setRecipients((current) => {
+      if (current.length >= SMART_REQUEST_MAX_RECIPIENTS) {
+        return current;
+      }
+
+      return [...current, createRecipient({ percentage: "0" })];
+    });
+    setIsReviewing(false);
+  }
+
+  function removeRecipient(id: string) {
+    setRecipients((current) => {
+      if (current.length <= 1) {
+        return current;
+      }
+
+      return current.filter((recipient) => recipient.id !== id);
+    });
+    setIsReviewing(false);
+  }
+
+  function handleModeChange(mode: SmartRequestMode) {
+    setPaymentMode(mode);
+    setIsReviewing(false);
+    setState({ status: "idle" });
+  }
 
   async function handleCopyLink() {
     if (!state.url) {
@@ -108,6 +232,112 @@ export function CreateLinkForm({
     }
   }
 
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setState({ status: "idle" });
+
+    try {
+      const validated = paymentMode === "standard"
+        ? calculateSmartRequestRecipients({ amount, currency, recipients })
+        : validateSmartRequestDraft({
+            mode: paymentMode,
+            amount,
+            currency,
+            recipients,
+            dueDate,
+            refundEligibilityDate,
+          });
+
+      if (!ownerEmail) {
+        throw new Error("Your wallet email is required.");
+      }
+
+      if (!isReviewing) {
+        setIsReviewing(true);
+        return;
+      }
+
+      setIsPending(true);
+
+      if (paymentMode === "standard") {
+        const paymentLink = await createPaymentLink({
+          amount,
+          description: description || undefined,
+          ownerEmail,
+          ownerName: ownerName || undefined,
+          walletSessionToken: walletUser?.sessionToken || undefined,
+          currency,
+          recurrence,
+          customerEmail: customerEmail || undefined,
+          customerName: customerName || undefined,
+        });
+
+        if (ownerEmail) {
+          localStorage.setItem(OWNER_EMAIL_KEY, ownerEmail);
+          syncOwnerCookies(ownerEmail, ownerName);
+          upsertStoredPaymentLink(ownerEmail, paymentLink);
+        }
+
+        if (ownerName) {
+          localStorage.setItem(OWNER_NAME_KEY, ownerName);
+        }
+
+        setState({
+          status: "success",
+          message: "Payment link created successfully.",
+          url: paymentLink.url,
+          paymentLink,
+        });
+        setCopied(false);
+        router.refresh();
+        onCreated?.(paymentLink);
+        return;
+      }
+
+      const response = await createSmartRequest({
+        amount,
+        description: description || undefined,
+        ownerEmail,
+        ownerName: ownerName || undefined,
+        walletSessionToken: walletUser?.sessionToken || undefined,
+        currency,
+        customerEmail: customerEmail || undefined,
+        customerName: customerName || undefined,
+        paymentMode,
+        recipients: validated.recipients,
+        deliverableDescription: deliverableDescription || undefined,
+        dueDate: dueDate || undefined,
+        refundEligibilityDate: refundEligibilityDate || undefined,
+      });
+
+      localStorage.setItem(OWNER_EMAIL_KEY, ownerEmail);
+      syncOwnerCookies(ownerEmail, ownerName);
+      upsertStoredPaymentLink(ownerEmail, response.paymentLink);
+
+      if (ownerName) {
+        localStorage.setItem(OWNER_NAME_KEY, ownerName);
+      }
+
+      setState({
+        status: "success",
+        message: `${paymentMode === "split" ? "Split payment" : "Protected payment"} request created successfully.`,
+        url: response.paymentLink.url,
+        paymentLink: response.paymentLink,
+        smartRequest: response.smartRequest,
+      });
+      setCopied(false);
+      router.refresh();
+      onCreated?.(response.paymentLink);
+    } catch (error) {
+      setState({
+        status: "error",
+        message: error instanceof Error ? error.message : "Unable to create payment request.",
+      });
+    } finally {
+      setIsPending(false);
+    }
+  }
+
   return (
     <Card className={compact ? "" : "max-w-2xl"}>
       <h2 className="text-xl font-semibold text-slate-900">Create a payment request</h2>
@@ -117,35 +347,30 @@ export function CreateLinkForm({
           : "Add your wallet email once and we&apos;ll remember it here for the next payment request you create."}
       </p>
 
-      <div className="mt-4 rounded-2xl bg-slate-50 p-4 text-sm leading-6 text-slate-600">
-        Use this when you want to charge a client, collect for a service, request a deposit, or share a simple pay-me link.
-      </div>
-
-      {customers.length ? (
-        <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
-          <div className="text-sm font-medium text-slate-900">Recent customers</div>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {customers.slice(0, 6).map((customer) => (
+      <form onSubmit={handleSubmit} className="mt-6 space-y-6">
+        <section>
+          <div className="grid gap-3 sm:grid-cols-3">
+            {[
+              { id: "standard", label: "Standard", detail: "One payer, one settlement path." },
+              { id: "split", label: "Split Payment", detail: "Distribute funds across recipients." },
+              { id: "protected", label: "Protected Payment", detail: "Hold funds until approval." },
+            ].map((option) => (
               <button
-                key={customer.email}
+                key={option.id}
                 type="button"
-                onClick={() => {
-                  setCustomerEmail(customer.email);
-                  setCustomerName(customer.name || "");
-                }}
-                className="rounded-full bg-slate-100 px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-200"
+                onClick={() => handleModeChange(option.id as SmartRequestMode)}
+                className={`rounded-2xl border px-4 py-3 text-left transition ${
+                  paymentMode === option.id
+                    ? "border-brand-500 bg-brand-50 text-brand-900 ring-2 ring-brand-100"
+                    : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
+                }`}
               >
-                {customer.name || customer.email}
+                <span className="block text-sm font-semibold">{option.label}</span>
+                <span className="mt-1 block text-xs leading-5 text-slate-500">{option.detail}</span>
               </button>
             ))}
           </div>
-        </div>
-      ) : null}
-
-      <form action={formAction} className="mt-6 space-y-5">
-        <input name="ownerEmail" type="hidden" value={ownerEmail} />
-        <input name="ownerName" type="hidden" value={ownerName} />
-        <input name="walletSessionToken" type="hidden" value={walletUser?.sessionToken || ""} />
+        </section>
 
         {walletUser?.email ? (
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
@@ -155,54 +380,77 @@ export function CreateLinkForm({
             <div className="mt-1 text-sm text-slate-500">{ownerEmail}</div>
           </div>
         ) : (
-          <>
-            <Field
-              label="Wallet email"
-              hint="Use the same email you used to create or restore your wallet."
-            >
+          <div className="grid gap-5 sm:grid-cols-2">
+            <Field label="Wallet email" hint="Use the same email you used to create or restore your wallet.">
               <input
-                name="ownerEmailVisible"
                 type="email"
                 placeholder="you@example.com"
                 value={ownerEmail}
-                onChange={(event) => setOwnerEmail(event.target.value)}
+                onChange={(event) => {
+                  setOwnerEmail(event.target.value);
+                  setIsReviewing(false);
+                }}
                 required
                 className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
               />
             </Field>
 
-            <Field
-              label="Name"
-              hint="We&apos;ll show this on the payment request so people know who they&apos;re paying."
-            >
+            <Field label="Name" hint="Shown on the payment request.">
               <input
-                name="ownerNameVisible"
                 type="text"
                 placeholder="Smart"
                 value={ownerName}
-                onChange={(event) => setOwnerName(event.target.value)}
+                onChange={(event) => {
+                  setOwnerName(event.target.value);
+                  setIsReviewing(false);
+                }}
                 className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
               />
             </Field>
-          </>
+          </div>
         )}
 
-        <Field
-          label="Amount"
-          hint="Required. This is the amount the payer will see right away."
-        >
+        {customers.length ? (
+          <div className="rounded-2xl border border-slate-200 bg-white p-4">
+            <div className="text-sm font-medium text-slate-900">Recent customers</div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {customers.slice(0, 6).map((customer) => (
+                <button
+                  key={customer.email}
+                  type="button"
+                  onClick={() => {
+                    setCustomerEmail(customer.email);
+                    setCustomerName(customer.name || "");
+                    setIsReviewing(false);
+                  }}
+                  className="rounded-full bg-slate-100 px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-200"
+                >
+                  {customer.name || customer.email}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        <Field label="Amount" hint="Required. This is the amount the payer will see right away.">
           <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_180px]">
             <input
-              name="amount"
               type="text"
               placeholder="500"
+              value={amount}
+              onChange={(event) => {
+                setAmount(event.target.value);
+                setIsReviewing(false);
+              }}
               required
               className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
             />
             <select
-              name="currency"
               value={currency}
-              onChange={(event) => setCurrency(event.target.value)}
+              onChange={(event) => {
+                setCurrency(event.target.value as PaymentCurrency);
+                setIsReviewing(false);
+              }}
               className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
             >
               <option value="USDC">USDC on Arc</option>
@@ -211,55 +459,229 @@ export function CreateLinkForm({
           </div>
         </Field>
 
-        <Field label="Description" hint="Optional. Tell the payer exactly what this request is for.">
+        <Field label="Description" hint="Tell the payer exactly what this request is for.">
           <textarea
-            name="description"
             rows={4}
             placeholder="Website design invoice"
+            value={description}
+            onChange={(event) => {
+              setDescription(event.target.value);
+              setIsReviewing(false);
+            }}
             className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
           />
         </Field>
 
         <div className="grid gap-5 sm:grid-cols-2">
-          <Field label="Customer email" hint="Optional. Save a specific customer on this request for faster follow-up.">
+          <Field label="Customer email" hint="Optional. Save a specific payer on this request.">
             <input
-              name="customerEmail"
               type="email"
               placeholder="client@example.com"
               value={customerEmail}
-              onChange={(event) => setCustomerEmail(event.target.value)}
+              onChange={(event) => {
+                setCustomerEmail(event.target.value);
+                setIsReviewing(false);
+              }}
               className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
             />
           </Field>
 
-          <Field label="Customer name" hint="Optional. Helpful for retainers, subscriptions, or named invoices.">
+          <Field label="Customer name" hint="Optional. Helpful for named invoices.">
             <input
-              name="customerName"
               type="text"
               placeholder="Acme team"
               value={customerName}
-              onChange={(event) => setCustomerName(event.target.value)}
+              onChange={(event) => {
+                setCustomerName(event.target.value);
+                setIsReviewing(false);
+              }}
               className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
             />
           </Field>
         </div>
 
-        <Field label="Billing cadence" hint="Recurring requests stay reusable for weekly or monthly collections.">
-          <select
-            name="recurrence"
-            value={recurrence}
-            onChange={(event) => setRecurrence(event.target.value)}
-            className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
-          >
-            <option value="one-time">One-time request</option>
-            <option value="weekly">Weekly recurring request</option>
-            <option value="monthly">Monthly recurring request</option>
-          </select>
-        </Field>
+        {paymentMode === "standard" ? (
+          <Field label="Billing cadence" hint="Recurring requests stay reusable for weekly or monthly collections.">
+            <select
+              value={recurrence}
+              onChange={(event) => {
+                setRecurrence(event.target.value);
+                setIsReviewing(false);
+              }}
+              className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+            >
+              <option value="one-time">One-time request</option>
+              <option value="weekly">Weekly recurring request</option>
+              <option value="monthly">Monthly recurring request</option>
+            </select>
+          </Field>
+        ) : null}
 
-        <Button type="submit" disabled={isPending}>
-          {isPending ? "Creating..." : "Create payment request"}
-        </Button>
+        {paymentMode !== "standard" ? (
+          <section className="space-y-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h3 className="text-sm font-semibold text-slate-900">Recipients</h3>
+                <p className="mt-1 text-xs text-slate-500">Allocations must total exactly 100% before you can continue.</p>
+              </div>
+              <div className={`rounded-2xl px-3 py-2 text-sm font-semibold ${
+                allocation.value?.isFullyAllocated ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"
+              }`}>
+                {allocationTotal}% allocated
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {calculatedRecipients.map((recipient, index) => (
+                <div key={recipient.id} className="rounded-2xl border border-slate-200 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-sm font-semibold text-slate-900">Recipient {index + 1}</div>
+                    {recipients.length > 1 ? (
+                      <button
+                        type="button"
+                        onClick={() => removeRecipient(recipient.id)}
+                        className="text-sm font-medium text-rose-600 hover:text-rose-700"
+                      >
+                        Remove
+                      </button>
+                    ) : null}
+                  </div>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    <input
+                      type="text"
+                      placeholder="Name"
+                      value={recipient.name}
+                      onChange={(event) => updateRecipient(recipient.id, { name: event.target.value })}
+                      className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Role"
+                      value={recipient.role}
+                      onChange={(event) => updateRecipient(recipient.id, { role: event.target.value })}
+                      className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+                    />
+                    <input
+                      type="email"
+                      placeholder="Email"
+                      value={recipient.email}
+                      onChange={(event) => updateRecipient(recipient.id, { email: event.target.value })}
+                      className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+                    />
+                    <input
+                      type="text"
+                      placeholder="0x wallet address"
+                      value={recipient.walletAddress}
+                      onChange={(event) => updateRecipient(recipient.id, { walletAddress: event.target.value })}
+                      required
+                      className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Percentage"
+                      value={recipient.percentage}
+                      onChange={(event) => updateRecipient(recipient.id, { percentage: event.target.value })}
+                      required
+                      className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+                    />
+                    <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                      {recipient.amount} {currency}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={addRecipient}
+              disabled={recipients.length >= SMART_REQUEST_MAX_RECIPIENTS}
+            >
+              Add recipient
+            </Button>
+          </section>
+        ) : null}
+
+        {paymentMode === "protected" ? (
+          <section className="space-y-4 rounded-2xl border border-brand-100 bg-brand-50 p-4">
+            <p className="text-sm leading-6 text-brand-900">
+              Protected payments are held by the Arc smart contract until the payer approves release after delivery.
+            </p>
+            <Field label="Deliverable description">
+              <textarea
+                rows={3}
+                value={deliverableDescription}
+                onChange={(event) => {
+                  setDeliverableDescription(event.target.value);
+                  setIsReviewing(false);
+                }}
+                placeholder="Describe what must be delivered before funds are released."
+                className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+              />
+            </Field>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Completion deadline">
+                <input
+                  type="date"
+                  value={dueDate}
+                  onChange={(event) => {
+                    setDueDate(event.target.value);
+                    setIsReviewing(false);
+                  }}
+                  required
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+                />
+              </Field>
+              <Field label="Refund eligibility date">
+                <input
+                  type="date"
+                  value={refundEligibilityDate}
+                  onChange={(event) => {
+                    setRefundEligibilityDate(event.target.value);
+                    setIsReviewing(false);
+                  }}
+                  required
+                  className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+                />
+              </Field>
+            </div>
+          </section>
+        ) : null}
+
+        {allocation.error ? <p className="text-sm text-rose-600">{allocation.error}</p> : null}
+
+        {isReviewing ? (
+          <section className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <h3 className="text-sm font-semibold text-slate-900">Review request</h3>
+            <div className="mt-4 grid gap-3 text-sm text-slate-700 sm:grid-cols-2">
+              <div>Total: {amount || "0"} {currency}</div>
+              <div>Payment mode: {paymentMode === "standard" ? "Standard" : paymentMode === "split" ? "Split Payment" : "Protected Payment"}</div>
+              <div>Deadline: {paymentMode === "protected" ? dueDate : "Not required"}</div>
+              <div>Estimated network fee: calculated at payment time</div>
+            </div>
+            <div className="mt-4 space-y-2">
+              {calculatedRecipients.map((recipient) => (
+                <div key={recipient.id} className="flex flex-col rounded-xl bg-white px-3 py-2 text-sm text-slate-700 sm:flex-row sm:items-center sm:justify-between">
+                  <span>{recipient.name || recipient.email || "Recipient"} · {recipient.percentage}%</span>
+                  <span>{recipient.amount} {currency}</span>
+                </div>
+              ))}
+            </div>
+            <p className="mt-4 text-sm leading-6 text-slate-600">{contractBehaviourForMode(paymentMode)}</p>
+          </section>
+        ) : null}
+
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <Button type="submit" disabled={isPending || (!isReviewing && !canSubmit)}>
+            {isPending ? "Creating..." : isReviewing ? "Confirm and create" : "Review request"}
+          </Button>
+          {isReviewing ? (
+            <Button type="button" variant="secondary" onClick={() => setIsReviewing(false)}>
+              Edit details
+            </Button>
+          ) : null}
+        </div>
       </form>
 
       {state.message ? (
@@ -273,9 +695,7 @@ export function CreateLinkForm({
           <p>{state.message}</p>
           {state.url ? (
             <>
-              <p className="mt-2 text-sm">
-                Your request is ready. Send this link to the person who should pay you.
-              </p>
+              <p className="mt-2 text-sm">Your request is ready. Send this link to the person who should pay you.</p>
               <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-start">
                 <p className="min-w-0 flex-1 break-all font-medium text-slate-800 dark:text-emerald-50">{state.url}</p>
                 <button
@@ -287,7 +707,9 @@ export function CreateLinkForm({
                 </button>
               </div>
               <div className="mt-3 rounded-xl bg-white/80 p-3 text-xs leading-5 text-slate-600 ring-1 ring-emerald-100 dark:bg-emerald-950 dark:text-emerald-100 dark:ring-emerald-800/70">
-                What happens next: the payer opens the link, sees who they are paying, confirms the amount, and completes the payment from one page.
+                {state.smartRequest
+                  ? "This Smart Request is saved and ready for on-chain execution when the payer starts checkout."
+                  : "The payer opens the link, confirms the amount, and completes the payment from one page."}
               </div>
             </>
           ) : null}

@@ -560,7 +560,11 @@ contract VeloxPayRequestsTest is Test {
         vm.prank(payer);
         token.approve(address(requests), type(uint256).max);
 
-        vm.expectRevert();
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                VeloxPayRequests.UnexpectedTokenBalanceDelta.selector, USDC_AMOUNT, (USDC_AMOUNT * 9_900) / 10_000
+            )
+        );
         vm.prank(payer);
         requests.fundRequest(requestId);
 

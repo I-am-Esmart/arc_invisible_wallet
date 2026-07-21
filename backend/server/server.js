@@ -13,6 +13,26 @@ const {
   executeSwapWithCircleWallets,
   getUnifiedBalanceWithCircleWallets
 } = require("./arc-app-kit");
+const {
+  buildDeliverableRecord,
+  buildExternalPaymentId,
+  buildSmartRequestTimeline,
+  canApproveProtectedRelease,
+  canClaimExpiredProtectedRefund,
+  canPayerAccessSmartRequest,
+  canSubmitProtectedDeliverable,
+  createSmartRequestRepository,
+  hashDeliverableRecord,
+  normalizeSmartRequest,
+  formatBaseUnits,
+  parseTokenAmountToBaseUnits
+} = require("./smart-requests");
+const {
+  createSmartRequestContractService
+} = require("./smart-request-contract-service");
+const {
+  createSmartRequestBridgeService
+} = require("./smart-request-bridge-service");
 
 const ERC20_ABI = [
   "function balanceOf(address owner) view returns (uint256)",
@@ -83,6 +103,7 @@ const CIRCLE_ENTITY_SECRET = process.env.CIRCLE_ENTITY_SECRET || "";
 const CIRCLE_WALLET_SET_ID = process.env.CIRCLE_WALLET_SET_ID || "";
 const CIRCLE_WALLET_SET_NAME = process.env.CIRCLE_WALLET_SET_NAME || "Invisible Wallet Set";
 const CIRCLE_BLOCKCHAIN = process.env.CIRCLE_BLOCKCHAIN || "ARC-TESTNET";
+const VELOXPAY_REQUESTS_CONTRACT_ADDRESS = process.env.VELOXPAY_REQUESTS_CONTRACT_ADDRESS || "";
 const ARC_APP_KIT_KEY = process.env.ARC_APP_KIT_KEY || process.env.KIT_KEY || "";
 const ENABLE_CIRCLE_WALLETS = Boolean(CIRCLE_API_KEY && CIRCLE_ENTITY_SECRET);
 const ENABLE_CIRCLE_WEBHOOK_VERIFICATION = Boolean(CIRCLE_API_KEY);
@@ -98,6 +119,19 @@ const circleWalletsClient = ENABLE_CIRCLE_WALLETS
   : null;
 
 const circleWebhookPublicKeyCache = new Map();
+
+function safeLogError(label, error) {
+  const rawMessage = String(error?.message || error || "Request failed.");
+  const sensitivePattern = /api[_ -]?key|entity[_ -]?secret|authorization|bearer|wallet[_ -]?credential|private[_ -]?key|redis|kv[_ -]?rest[_ -]?token/i;
+  const message = sensitivePattern.test(rawMessage) ? "Request failed." : rawMessage;
+
+  console.error(label, {
+    name: String(error?.name || "Error"),
+    code: String(error?.code || ""),
+    statusCode: error?.statusCode || error?.status || "",
+    message
+  });
+}
 const requestRateLimitCache = new Map();
 
 function normalizeOrigin(origin) {
@@ -1072,7 +1106,9 @@ async function createCircleWallet(store) {
     walletId: wallet.id,
     walletAddress: wallet.address,
     walletSetId,
-    blockchain: CIRCLE_BLOCKCHAIN
+    blockchain: CIRCLE_BLOCKCHAIN,
+    accountType: "SCA",
+    gasStationEligible: ENABLE_CIRCLE_GAS_STATION && CIRCLE_BLOCKCHAIN === "ARC-TESTNET"
   };
 }
 
@@ -1368,6 +1404,8 @@ async function ensureUserRecord(store, { email, displayName }) {
       existingUser.walletId = wallet.walletId;
       existingUser.walletSetId = wallet.walletSetId;
       existingUser.blockchain = wallet.blockchain;
+      existingUser.accountType = wallet.accountType;
+      existingUser.gasStationEligible = wallet.gasStationEligible;
       existingUser.address = wallet.walletAddress;
     }
 
@@ -1394,6 +1432,8 @@ async function ensureUserRecord(store, { email, displayName }) {
     user.walletId = wallet.walletId;
     user.walletSetId = wallet.walletSetId;
     user.blockchain = wallet.blockchain;
+    user.accountType = wallet.accountType;
+    user.gasStationEligible = wallet.gasStationEligible;
     user.address = wallet.walletAddress;
   }
 
@@ -1860,6 +1900,7 @@ function mapStoredUser(user, options = {}) {
     return null;
   }
 
+  const accountType = getCircleWalletAccountType(user);
   const mappedUser = {
     email: user.email,
     address: user.address,
@@ -1868,8 +1909,8 @@ function mapStoredUser(user, options = {}) {
     displayName: user.displayName,
     username: user.username,
     custodyType: user.walletId ? "circle-developer-controlled" : "local-demo",
-    accountType: user.walletId ? "SCA" : "EOA",
-    gasMode: user.walletId && ENABLE_CIRCLE_GAS_STATION ? "sponsored" : "usdc-native",
+    accountType,
+    gasMode: user.walletId && ENABLE_CIRCLE_GAS_STATION && accountType === "SCA" ? "sponsorship-eligible" : "standard-arc-fee",
     network: "arc-testnet"
   };
 
@@ -1878,6 +1919,14 @@ function mapStoredUser(user, options = {}) {
   }
 
   return mappedUser;
+}
+
+function getCircleWalletAccountType(user) {
+  if (!user?.walletId) {
+    return "EOA";
+  }
+
+  return user.accountType || "SCA";
 }
 
 function buildWalletSessionToken({ email }) {
@@ -1978,6 +2027,386 @@ async function fetchTokenBalance(address, token) {
     symbol: tokenConfig.symbol,
     address: tokenConfig.address,
     balance: ethers.formatUnits(rawBalance, decimals)
+  };
+}
+
+function createSmartRequestRepo(store) {
+  return createSmartRequestRepository({
+    store,
+    writeStore,
+    getPersistentJson,
+    setPersistentJson
+  });
+}
+
+function getSmartRequestContractService() {
+  return createSmartRequestContractService({
+    circleWalletsClient,
+    provider,
+    contractAddress: VELOXPAY_REQUESTS_CONTRACT_ADDRESS,
+    veloxPayRequestsAddress: VELOXPAY_REQUESTS_CONTRACT_ADDRESS,
+    blockchain: CIRCLE_BLOCKCHAIN,
+    gasStationEnabled: ENABLE_CIRCLE_GAS_STATION,
+    pollIntervalMs: TX_RECEIPT_POLL_INTERVAL_MS,
+    pollTimeoutMs: TX_RECEIPT_TIMEOUT_MS
+  });
+}
+
+function getSmartRequestBridgeService() {
+  return createSmartRequestBridgeService({
+    apiKey: CIRCLE_API_KEY,
+    entitySecret: CIRCLE_ENTITY_SECRET,
+    baseUrl: CIRCLE_API_URL
+  });
+}
+
+async function getSmartRequestByPublicId(store, smartRequestId) {
+  const smartRequestRepository = createSmartRequestRepo(store);
+  const smartRequest = await smartRequestRepository.getById(smartRequestId);
+
+  if (!smartRequest) {
+    const error = new Error("Smart request not found");
+    error.statusCode = 404;
+    throw error;
+  }
+
+  return smartRequest;
+}
+
+async function resolvePayerForSmartRequest(store, payerEmail) {
+  const normalizedPayerEmail = normalizeEmail(payerEmail);
+
+  if (!normalizedPayerEmail) {
+    const error = new Error("Payer email is required");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const payer = await ensureUserRecord(store, {
+    email: normalizedPayerEmail,
+    displayName: displayNameFromEmail(normalizedPayerEmail)
+  });
+
+  if (!payer.walletId) {
+    const error = new Error("Create or restore your VeloxPay Circle wallet before paying this Smart Request.");
+    error.statusCode = 409;
+    error.payload = {
+      createWalletUrl: `${WALLET_APP_BASE_URL}/login?source=veloxpay`
+    };
+    throw error;
+  }
+
+  return payer;
+}
+
+async function resolveAuthorizedPayerForSmartRequest(store, req, smartRequest, payerEmail) {
+  const normalizedPayerEmail = normalizeEmail(payerEmail);
+
+  requireExpectedSmartRequestPayer(smartRequest, normalizedPayerEmail);
+  requireWalletSession(req, normalizedPayerEmail);
+
+  const payer = await resolvePayerForSmartRequest(store, normalizedPayerEmail);
+
+  if (
+    smartRequest.actualPayerWalletId &&
+    smartRequest.actualPayerWalletId !== payer.walletId
+  ) {
+    const error = new Error("This Smart Request is already assigned to a different payer wallet.");
+    error.statusCode = 403;
+    throw error;
+  }
+
+  return payer;
+}
+
+function requireExpectedSmartRequestPayer(smartRequest, payerEmail) {
+  const normalizedPayerEmail = normalizeEmail(payerEmail);
+
+  if (!normalizedPayerEmail) {
+    const error = new Error("Payer email is required");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (!canPayerAccessSmartRequest(smartRequest, normalizedPayerEmail)) {
+    const error = new Error("This Smart Request is assigned to a different payer.");
+    error.statusCode = 403;
+    throw error;
+  }
+}
+
+function buildStoredSmartRequestTransaction({ id, txHash, blockchain = CIRCLE_BLOCKCHAIN }) {
+  if (!id && !txHash) {
+    return null;
+  }
+
+  return mapCircleTransactionForPublic({
+    id,
+    txHash,
+    state: "COMPLETE",
+    blockchain
+  });
+}
+
+function isSmartRequestFundingComplete(smartRequest) {
+  const expectedStatus = smartRequest.mode === "protected" ? "funded" : "settled";
+  return smartRequest.onchainStatus === expectedStatus;
+}
+
+function hasBridgeExecutionStarted(bridge) {
+  if (!bridge) {
+    return false;
+  }
+
+  return Boolean(
+    bridge.provider ||
+    bridge.rawState ||
+    bridge.steps?.some((step) => step.txHash) ||
+    bridge.events?.some((event) => event.txHash)
+  );
+}
+
+function resolveBridgeSourceAddress(payer, requestedSourceAddress) {
+  const sourceAddress = String(requestedSourceAddress || payer.address || "").trim();
+
+  if (!sourceAddress || !ethers.isAddress(sourceAddress)) {
+    const error = new Error("Source wallet address must be a valid EVM address.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (ethers.getAddress(sourceAddress) !== ethers.getAddress(payer.address)) {
+    const error = new Error("Bridge source address must match the verified payer wallet.");
+    error.statusCode = 403;
+    throw error;
+  }
+
+  return ethers.getAddress(sourceAddress);
+}
+
+function verifyPaymentChallengeForSmartRequest({ linkId, payerEmail, verificationCode, challengeId, linkToken }) {
+  if (!payerEmail || !verificationCode || !challengeId) {
+    const error = new Error("Email, verification code, and challenge ID are required");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const challenge = readPaymentChallengeToken(challengeId);
+
+  if (!challenge) {
+    const error = new Error("Verification session expired. Please request a new code.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (challenge.linkId !== linkId) {
+    const error = new Error("Verification session does not match this payment link.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (challenge.payerEmail !== payerEmail) {
+    const error = new Error("Verification email does not match the active session.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (challenge.linkToken && linkToken && challenge.linkToken !== linkToken) {
+    const error = new Error("Verification session does not match this payment link token.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (new Date(challenge.expiresAt).getTime() <= Date.now()) {
+    const error = new Error("Verification code expired. Please request a new code.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (challenge.codeHash !== hashOtpCode(verificationCode)) {
+    const error = new Error("Incorrect verification code.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return challenge;
+}
+
+async function getSmartRequestPayerBalance(smartRequest, payerAddress) {
+  const tokenContract = getTokenContract(smartRequest.currency);
+  const rawBalance = await tokenContract.balanceOf(payerAddress);
+  const tokenConfig = getTokenConfig(smartRequest.currency);
+
+  return {
+    balanceBaseUnits: rawBalance.toString(),
+    balance: ethers.formatUnits(rawBalance, tokenConfig.decimals),
+    hasEnoughBalance: rawBalance >= BigInt(smartRequest.amountBaseUnits)
+  };
+}
+
+function bridgeMissingBaseUnits(requiredBaseUnits, balanceBaseUnits) {
+  const required = BigInt(String(requiredBaseUnits || "0"));
+  const balance = BigInt(String(balanceBaseUnits || "0"));
+  return required > balance ? (required - balance).toString() : required.toString();
+}
+
+function isSupportedBridgeRoute(fromChain, toChain) {
+  const source = String(fromChain || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+  const destination = String(toChain || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+
+  return source === "ethereum_sepolia" && destination === "arc_testnet";
+}
+
+async function ensureSmartRequestOnchain(store, smartRequest) {
+  if (smartRequest.onchainRequestId && smartRequest.onchainStatus !== "not_created") {
+    return smartRequest;
+  }
+
+  const smartRequestRepository = createSmartRequestRepo(store);
+  const contractService = getSmartRequestContractService();
+  const creator = await getStoredUser(store, smartRequest.creatorUserId);
+  const dueAt = Math.floor(new Date(smartRequest.dueDate).getTime() / 1000).toString();
+  const result = await contractService.createOnchainSmartRequest({
+    walletId: smartRequest.creatorWalletId,
+    walletAccountType: getCircleWalletAccountType(creator),
+    contractAddress: smartRequest.contractAddress || VELOXPAY_REQUESTS_CONTRACT_ADDRESS,
+    externalPaymentId: smartRequest.externalPaymentId,
+    tokenAddress: smartRequest.tokenAddress,
+    amountBaseUnits: smartRequest.amountBaseUnits,
+    mode: smartRequest.mode,
+    dueAt,
+    metadataHash: smartRequest.metadataHash,
+    recipients: smartRequest.recipients.map((recipient) => ({
+      account: recipient.walletAddress,
+      allocationBps: recipient.allocationBps
+    })),
+    idempotencyKey: `smart-request-create:${smartRequest.id}`,
+    refId: `veloxpay-smart-request-create:${smartRequest.id}`
+  });
+
+  if (!result.ok) {
+    const error = new Error(result.error.message);
+    error.statusCode = result.error.retryable ? 503 : 400;
+    error.payload = result.error;
+    throw error;
+  }
+
+  const updated = normalizeSmartRequest({
+    ...smartRequest,
+    contractAddress: result.data.contractAddress || smartRequest.contractAddress,
+    onchainRequestId: result.data.onchainRequestId || smartRequest.onchainRequestId,
+    onchainStatus: result.data.onchainStatus || "open",
+    updatedAt: new Date().toISOString()
+  });
+
+  await smartRequestRepository.save(updated);
+  writeStore(store);
+  return updated;
+}
+
+async function refreshSmartRequestFromContract(store, smartRequest) {
+  if (!smartRequest.onchainRequestId || !smartRequest.contractAddress || /^0x0{40}$/i.test(smartRequest.contractAddress)) {
+    return smartRequest;
+  }
+
+  const result = await getSmartRequestContractService().getSmartRequestFromContract({
+    contractAddress: smartRequest.contractAddress,
+    requestId: smartRequest.onchainRequestId
+  });
+
+  if (!result.ok) {
+    return smartRequest;
+  }
+
+  const updated = normalizeSmartRequest({
+    ...smartRequest,
+    onchainStatus: result.data.status,
+    deliverableHash: result.data.deliverableHash && !/^0x0{64}$/i.test(result.data.deliverableHash)
+      ? result.data.deliverableHash
+      : smartRequest.deliverableHash,
+    updatedAt: new Date().toISOString()
+  });
+
+  await createSmartRequestRepo(store).save(updated);
+  writeStore(store);
+  return updated;
+}
+
+function requireHttpUrl(value, label) {
+  const raw = String(value || "").trim();
+
+  try {
+    const url = new URL(raw);
+    if (!["http:", "https:"].includes(url.protocol)) {
+      throw new Error(`${label} must be an HTTP or HTTPS URL`);
+    }
+    return url.toString();
+  } catch {
+    const error = new Error(`${label} must be a valid HTTP or HTTPS URL`);
+    error.statusCode = 400;
+    throw error;
+  }
+}
+
+function mapCircleTransactionForPublic(transaction) {
+  if (!transaction) {
+    return null;
+  }
+
+  const txHash = transaction.txHash || transaction.transactionHash || "";
+
+  return {
+    id: transaction.id || "",
+    state: transaction.state || "",
+    txHash,
+    explorerUrl: txHash ? buildExplorerUrl(txHash) : "",
+    blockchain: transaction.blockchain || CIRCLE_BLOCKCHAIN,
+    gasSponsorship: transaction.gasSponsorship || null
+  };
+}
+
+function mapSmartRequestCheckoutResponse(smartRequest, extra = {}) {
+  return {
+    smartRequest,
+    bridge: smartRequest.bridge || null,
+    explorerBaseUrl: ARC_EXPLORER_BASE_URL,
+    ...extra
+  };
+}
+
+function mapProtectedSmartRequestForUser(smartRequest, actorEmail) {
+  const role = normalizeEmail(smartRequest.creatorUserId) === normalizeEmail(actorEmail)
+    ? "payee"
+    : "payer";
+  const deliverableRecord = smartRequest.deliverableUrl
+    ? buildDeliverableRecord({
+        smartRequest,
+        deliverableUrl: smartRequest.deliverableUrl,
+        note: smartRequest.deliverableNote || "",
+        submittedBy: smartRequest.creatorUserId,
+        submittedAt: smartRequest.deliverableSubmittedAt || smartRequest.updatedAt
+      })
+    : null;
+  const localDeliverableHash = deliverableRecord ? hashDeliverableRecord(deliverableRecord) : "";
+
+  return {
+    ...smartRequest,
+    role,
+    timeline: buildSmartRequestTimeline(smartRequest),
+    deliverableRecord,
+    localDeliverableHash,
+    hashMatchesOnchain: Boolean(localDeliverableHash && smartRequest.deliverableHash && localDeliverableHash === smartRequest.deliverableHash),
+    permissions: {
+      canSubmitDeliverable: canSubmitProtectedDeliverable(smartRequest, actorEmail),
+      canApproveRelease: canApproveProtectedRelease(smartRequest, actorEmail),
+      canClaimExpiredRefund: canClaimExpiredProtectedRefund(smartRequest, actorEmail)
+    },
+    explorerUrls: {
+      funding: smartRequest.fundingTransactionHash ? buildExplorerUrl(smartRequest.fundingTransactionHash) : "",
+      deliverable: smartRequest.deliverableTransactionHash ? buildExplorerUrl(smartRequest.deliverableTransactionHash) : "",
+      release: smartRequest.releaseTransactionHash ? buildExplorerUrl(smartRequest.releaseTransactionHash) : "",
+      refund: smartRequest.refundTransactionHash ? buildExplorerUrl(smartRequest.refundTransactionHash) : ""
+    }
   };
 }
 
@@ -2971,6 +3400,186 @@ app.post("/payment-links", async (req, res) => {
   }
 });
 
+app.post("/smart-requests", async (req, res) => {
+  try {
+    const {
+      amount,
+      description,
+      currency,
+      ownerEmail,
+      ownerName,
+      walletSessionToken,
+      customerEmail,
+      customerName,
+      paymentMode,
+      recipients,
+      deliverableDescription,
+      dueDate,
+      refundEligibilityDate
+    } = req.body;
+    const normalizedCurrency = normalizeToken(currency || DEFAULT_LINK_CURRENCY);
+    const tokenConfig = getTokenConfig(normalizedCurrency);
+    const mode = String(paymentMode || "standard").trim().toLowerCase();
+
+    if (!["standard", "split", "protected"].includes(mode)) {
+      return res.status(400).json({ error: "Payment type must be standard, split, or protected" });
+    }
+
+    if (!amount) {
+      return res.status(400).json({ error: "Amount is required" });
+    }
+
+    if (!tokenConfig) {
+      return res.status(400).json({ error: buildTokenError() });
+    }
+
+    let amountBaseUnits;
+    try {
+      amountBaseUnits = parseTokenAmountToBaseUnits(String(amount), tokenConfig.decimals);
+    } catch (error) {
+      return res.status(400).json({ error: error.message });
+    }
+
+    requireWalletSession(
+      {
+        ...req,
+        body: {
+          ...req.body,
+          walletSessionToken
+        }
+      },
+      ownerEmail
+    );
+
+    const store = readStore();
+    const owner = await resolveOwnerIdentity(store, { email: ownerEmail, displayName: ownerName });
+    const id = crypto.randomUUID();
+    const normalizedAmount = ethers.formatUnits(amountBaseUnits, tokenConfig.decimals);
+    const createdAt = new Date().toISOString();
+    const smartRecipients = Array.isArray(recipients) && recipients.length
+      ? recipients
+      : [
+        {
+          name: owner.displayName,
+          role: "creator",
+          email: owner.email,
+          walletAddress: owner.address,
+          allocationBps: 10_000
+        }
+      ];
+    const paymentLink = {
+      id,
+      username: owner.username || DEFAULT_OWNER_USERNAME,
+      ownerName: owner.displayName,
+      ownerEmail: owner.email,
+      recipientAddress: owner.address,
+      amount: normalizedAmount,
+      description: String(description || deliverableDescription || "").trim(),
+      currency: tokenConfig.symbol,
+      recurrence: buildRecurrence("one-time", createdAt),
+      customerEmail: normalizeEmail(customerEmail || ""),
+      customerName: String(customerName || "").trim(),
+      status: "active",
+      createdAt,
+      smartRequestId: id,
+      paymentMode: mode,
+      timeline: [createTimelineEvent("sent", `${mode === "standard" ? "Payment" : "Smart"} request created`)]
+    };
+
+    paymentLink.linkCode = generateShortPaymentLinkCode({
+      username: paymentLink.username,
+      amount: paymentLink.amount,
+      currency: paymentLink.currency
+    });
+    paymentLink.linkToken = buildPaymentLinkToken(paymentLink);
+    paymentLink.url = buildPaymentLinkUrl(paymentLink);
+
+    const smartRequest = normalizeSmartRequest({
+      id,
+      paymentLinkId: paymentLink.id,
+      externalPaymentId: buildExternalPaymentId(id),
+      contractAddress: VELOXPAY_REQUESTS_CONTRACT_ADDRESS || "0x0000000000000000000000000000000000000000",
+      chain: CIRCLE_BLOCKCHAIN,
+      mode,
+      currency: tokenConfig.symbol,
+      tokenAddress: tokenConfig.address,
+      amount: normalizedAmount,
+      amountBaseUnits,
+      creatorUserId: owner.email,
+      creatorWalletId: owner.walletId || owner.email,
+      creatorWalletAddress: owner.address,
+      expectedPayerEmail: normalizeEmail(customerEmail || ""),
+      recipients: smartRecipients,
+      description: String(description || "").trim(),
+      dueDate: dueDate || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      refundEligibilityDate: refundEligibilityDate || dueDate || "",
+      deliverableUrl: String(deliverableDescription || "").trim(),
+      offchainStatus: "open",
+      onchainStatus: "not_created",
+      createdAt,
+      updatedAt: createdAt
+    });
+
+    await syncStoredPaymentLink(store, paymentLink);
+    const smartRequestRepository = createSmartRequestRepository({
+      store,
+      writeStore,
+      getPersistentJson,
+      setPersistentJson
+    });
+    await smartRequestRepository.save(smartRequest);
+
+    if (paymentLink.customerEmail) {
+      const nextCustomers = rememberCustomer(store, paymentLink.ownerEmail, {
+        email: paymentLink.customerEmail,
+        name: paymentLink.customerName || "",
+        lastPaidAt: paymentLink.createdAt
+      });
+      await savePersistentCustomers(paymentLink.ownerEmail, nextCustomers);
+    }
+    writeStore(store);
+
+    res.status(201).json({
+      paymentLink,
+      smartRequest,
+      estimatedNetworkFee: "Calculated at payment time",
+      contractBehaviour: mode === "protected"
+        ? "Funds are held by the Arc smart contract until the payer approves release or a valid refund path is used."
+        : mode === "split"
+          ? "Funds are distributed atomically by the Arc smart contract according to recipient allocations."
+          : "Funds settle to the single recipient as a standard payment request."
+    });
+  } catch (err) {
+    safeLogError("Create smart request error:", err);
+    res.status(err.statusCode || 500).json({ error: err.message });
+  }
+});
+
+app.get("/smart-requests/payment-link/:paymentLinkId", async (req, res) => {
+  try {
+    const paymentLinkId = String(req.params.paymentLinkId || "").trim();
+
+    if (!paymentLinkId) {
+      return res.status(400).json({ error: "Payment link ID is required" });
+    }
+
+    const store = readStore();
+    const smartRequestRepository = createSmartRequestRepo(store);
+    let smartRequest = await smartRequestRepository.getByPaymentLinkId(paymentLinkId);
+
+    if (!smartRequest) {
+      return res.status(404).json({ error: "Smart request not found" });
+    }
+
+    smartRequest = await refreshSmartRequestFromContract(store, smartRequest);
+
+    res.json(mapSmartRequestCheckoutResponse(smartRequest));
+  } catch (err) {
+    safeLogError("Get smart request by payment link error:", err);
+    res.status(err.statusCode || 500).json({ error: err.message });
+  }
+});
+
 app.get("/payment-links/recurring", async (req, res) => {
   try {
     const ownerEmail = normalizeEmail(req.query.ownerEmail);
@@ -3215,10 +3824,14 @@ app.get("/unified-balance", async (req, res) => {
 });
 
 app.post("/bridge/quote", (req, res) => {
-  const { fromChain = "Base Sepolia", toChain = "Arc Testnet", amount = "0", token = "USDC" } = req.body || {};
+  const { fromChain = "Ethereum Sepolia", toChain = "Arc Testnet", amount = "0", token = "USDC" } = req.body || {};
 
   if (normalizeToken(token) !== "USDC") {
     return res.status(400).json({ error: "Arc App Kit bridge currently supports USDC for this VeloxPay flow" });
+  }
+
+  if (!isSupportedBridgeRoute(fromChain, toChain)) {
+    return res.status(400).json({ error: "VeloxPay bridge currently supports only Ethereum Sepolia to Arc Testnet." });
   }
 
   res.json({
@@ -3237,7 +3850,7 @@ app.post("/bridge/quote", (req, res) => {
 
 app.post("/bridge", async (req, res) => {
   const {
-    fromChain = "Base_Sepolia",
+    fromChain = "Ethereum_Sepolia",
     toChain = "Arc_Testnet",
     fromAddress,
     toAddress,
@@ -3252,6 +3865,10 @@ app.post("/bridge", async (req, res) => {
 
   if (normalizeToken(token) !== "USDC") {
     return res.status(400).json({ error: "Arc App Kit bridge currently supports USDC for this VeloxPay flow" });
+  }
+
+  if (!isSupportedBridgeRoute(fromChain, toChain)) {
+    return res.status(400).json({ error: "VeloxPay bridge currently supports only Ethereum Sepolia to Arc Testnet." });
   }
 
   if (!execute) {
@@ -3295,7 +3912,11 @@ app.post("/bridge", async (req, res) => {
 });
 
 app.post("/bridge/prepare", (req, res) => {
-  const { fromChain = "Base_Sepolia", toChain = "Arc_Testnet", amount = "0", token = "USDC" } = req.body || {};
+  const { fromChain = "Ethereum_Sepolia", toChain = "Arc_Testnet", amount = "0", token = "USDC" } = req.body || {};
+
+  if (!isSupportedBridgeRoute(fromChain, toChain)) {
+    return res.status(400).json({ error: "VeloxPay bridge currently supports only Ethereum Sepolia to Arc Testnet." });
+  }
 
   res.status(202).json({
     status: "ready_for_execution",
@@ -3465,6 +4086,818 @@ app.post("/payment-links/:linkId/send-code", async (req, res) => {
   } catch (err) {
     console.error("Send verification code error:", err);
     res.status(err.statusCode || 500).json({ error: err.message });
+  }
+});
+
+app.post("/smart-requests/:id/verify-payer", async (req, res) => {
+  try {
+    const smartRequestId = String(req.params.id || "").trim();
+    const payerEmail = normalizeEmail(req.body.payerEmail);
+    const verificationCode = String(req.body.verificationCode || "").trim();
+    const challengeId = String(req.body.challengeId || "").trim();
+    const linkId = String(req.body.linkId || "").trim();
+    const linkToken = String(req.body.linkToken || "").trim();
+    const store = readStore();
+    let smartRequest = await getSmartRequestByPublicId(store, smartRequestId);
+    requireExpectedSmartRequestPayer(smartRequest, payerEmail);
+
+    verifyPaymentChallengeForSmartRequest({
+      linkId: linkId || smartRequest.paymentLinkId,
+      payerEmail,
+      verificationCode,
+      challengeId,
+      linkToken
+    });
+
+    const payer = await resolvePayerForSmartRequest(store, payerEmail);
+    smartRequest = await ensureSmartRequestOnchain(store, smartRequest);
+    const updated = normalizeSmartRequest({
+      ...smartRequest,
+      actualPayerEmail: payerEmail,
+      actualPayerWalletId: payer.walletId,
+      actualPayerWalletAddress: payer.address,
+      expectedPayerEmail: smartRequest.expectedPayerEmail || payerEmail,
+      offchainStatus: smartRequest.offchainStatus === "open" ? "awaiting_funding" : smartRequest.offchainStatus,
+      updatedAt: new Date().toISOString()
+    });
+
+    await createSmartRequestRepo(store).save(updated);
+    writeStore(store);
+
+    res.json(mapSmartRequestCheckoutResponse(updated, {
+      payer: mapStoredUser(payer, { includeSession: true }),
+      message: "Payer verified. Your Circle wallet is ready for checkout."
+    }));
+  } catch (err) {
+    safeLogError("Smart request payer verification error:", err);
+    res.status(err.statusCode || 500).json({
+      error: err.message,
+      ...(err.payload ? { payload: err.payload } : {})
+    });
+  }
+});
+
+app.post("/smart-requests/:id/check-balance", async (req, res) => {
+  try {
+    const store = readStore();
+    let smartRequest = await getSmartRequestByPublicId(store, req.params.id);
+    const payer = await resolveAuthorizedPayerForSmartRequest(store, req, smartRequest, req.body.payerEmail);
+    smartRequest = await ensureSmartRequestOnchain(store, smartRequest);
+    const balance = await getSmartRequestPayerBalance(smartRequest, payer.address);
+
+    if (!balance.hasEnoughBalance) {
+      return res.status(402).json({
+        error: `Insufficient ${smartRequest.currency}. Have ${balance.balance} ${smartRequest.currency}, need ${smartRequest.amount} ${smartRequest.currency}.`,
+        balance,
+        smartRequest
+      });
+    }
+
+    res.json(mapSmartRequestCheckoutResponse(smartRequest, { balance }));
+  } catch (err) {
+    safeLogError("Smart request balance check error:", err);
+    res.status(err.statusCode || 500).json({
+      error: err.message,
+      ...(err.payload ? { payload: err.payload } : {})
+    });
+  }
+});
+
+app.post("/smart-requests/:id/bridge/quote", async (req, res) => {
+  try {
+    const store = readStore();
+    const repository = createSmartRequestRepo(store);
+    let smartRequest = await getSmartRequestByPublicId(store, req.params.id);
+    const payer = await resolveAuthorizedPayerForSmartRequest(store, req, smartRequest, req.body.payerEmail);
+
+    if (smartRequest.currency !== "USDC") {
+      return res.status(400).json({ error: "Cross-chain Smart Request payments support USDC only. EURC remains Arc-only." });
+    }
+
+    if (!ENABLE_ARC_APP_KIT_EXECUTION) {
+      return res.status(202).json({
+        status: "configuration_required",
+        error: "Circle App Kit Bridge is not configured for execution.",
+        smartRequest,
+        bridge: smartRequest.bridge || null
+      });
+    }
+
+    smartRequest = await ensureSmartRequestOnchain(store, smartRequest);
+    const balance = await getSmartRequestPayerBalance(smartRequest, payer.address);
+    const sourceAmount = formatBaseUnits(
+      bridgeMissingBaseUnits(smartRequest.amountBaseUnits, balance.balanceBaseUnits),
+      getTokenConfig("USDC").decimals
+    );
+    const quote = await getSmartRequestBridgeService().estimateSmartRequestBridge({
+      sourceAddress: resolveBridgeSourceAddress(payer, req.body.sourceAddress),
+      destinationAddress: payer.address,
+      amount: sourceAmount,
+      token: "USDC",
+      traceId: `veloxpay-smart-request-bridge-quote-${smartRequest.id}`
+    });
+    const now = new Date().toISOString();
+    const bridge = {
+      ...(smartRequest.bridge || {}),
+      id: smartRequest.bridge?.id || crypto.randomUUID(),
+      ...quote,
+      sourceAmount,
+      status: "pending",
+      quote,
+      createdAt: smartRequest.bridge?.createdAt || now,
+      updatedAt: now
+    };
+
+    smartRequest = normalizeSmartRequest({
+      ...smartRequest,
+      bridge,
+      updatedAt: now
+    });
+    await repository.save(smartRequest);
+    writeStore(store);
+
+    res.json(mapSmartRequestCheckoutResponse(smartRequest, {
+      bridge,
+      balance,
+      message: "Bridge quote estimated. Confirm the bridge before continuing to Smart Request payment."
+    }));
+  } catch (err) {
+    safeLogError("Smart request bridge quote error:", err);
+    res.status(err.statusCode || 500).json({
+      error: err.message,
+      ...(err.payload ? { payload: err.payload } : {})
+    });
+  }
+});
+
+app.post("/smart-requests/:id/bridge/execute", async (req, res) => {
+  try {
+    const store = readStore();
+    const repository = createSmartRequestRepo(store);
+    let smartRequest = await getSmartRequestByPublicId(store, req.params.id);
+    const payer = await resolveAuthorizedPayerForSmartRequest(store, req, smartRequest, req.body.payerEmail);
+
+    if (smartRequest.currency !== "USDC") {
+      return res.status(400).json({ error: "Cross-chain Smart Request payments support USDC only. EURC remains Arc-only." });
+    }
+
+    if (!ENABLE_ARC_APP_KIT_EXECUTION) {
+      return res.status(202).json({
+        status: "configuration_required",
+        error: "Circle App Kit Bridge is not configured for execution.",
+        smartRequest,
+        bridge: smartRequest.bridge || null
+      });
+    }
+
+    smartRequest = await ensureSmartRequestOnchain(store, smartRequest);
+    if (hasBridgeExecutionStarted(smartRequest.bridge)) {
+      const balance = await getSmartRequestPayerBalance(smartRequest, payer.address);
+      return res.json(mapSmartRequestCheckoutResponse(smartRequest, {
+        bridge: smartRequest.bridge,
+        balance,
+        arcBalanceConfirmed: balance.hasEnoughBalance,
+        message: "Bridge execution is already recorded. Resume instead of starting another bridge."
+      }));
+    }
+
+    const balanceBefore = await getSmartRequestPayerBalance(smartRequest, payer.address);
+    const sourceAmount = smartRequest.bridge?.sourceAmount ||
+      formatBaseUnits(bridgeMissingBaseUnits(smartRequest.amountBaseUnits, balanceBefore.balanceBaseUnits), getTokenConfig("USDC").decimals);
+    const bridgeId = smartRequest.bridge?.id || crypto.randomUUID();
+    const now = new Date().toISOString();
+
+    smartRequest = normalizeSmartRequest({
+      ...smartRequest,
+      bridge: {
+        ...(smartRequest.bridge || {}),
+        id: bridgeId,
+        sourceAmount,
+        status: "pending",
+        updatedAt: now,
+        createdAt: smartRequest.bridge?.createdAt || now
+      },
+      updatedAt: now
+    });
+    await repository.save(smartRequest);
+    writeStore(store);
+
+    const result = await getSmartRequestBridgeService().executeSmartRequestBridge({
+      id: bridgeId,
+      sourceAddress: resolveBridgeSourceAddress(payer, req.body.sourceAddress),
+      destinationAddress: payer.address,
+      amount: sourceAmount,
+      token: "USDC",
+      traceId: `veloxpay-smart-request-bridge-${smartRequest.id}-${bridgeId}`
+    });
+    const balanceAfter = await getSmartRequestPayerBalance(smartRequest, payer.address);
+    const arcBalanceConfirmed = balanceAfter.hasEnoughBalance;
+    const completedAt = new Date().toISOString();
+    const bridge = {
+      ...(smartRequest.bridge || {}),
+      ...result,
+      id: bridgeId,
+      sourceAmount,
+      status: result.status === "success" && arcBalanceConfirmed ? "success" : result.status === "error" ? "recovery_required" : "pending",
+      updatedAt: completedAt
+    };
+
+    smartRequest = normalizeSmartRequest({
+      ...smartRequest,
+      bridge,
+      updatedAt: completedAt
+    });
+    await repository.save(smartRequest);
+    writeStore(store);
+
+    res.json(mapSmartRequestCheckoutResponse(smartRequest, {
+      bridge,
+      balance: balanceAfter,
+      arcBalanceConfirmed,
+      message: arcBalanceConfirmed
+        ? "USDC arrived on Arc. Continue with approval and Smart Request payment."
+        : "Bridge submitted, but Arc balance is not confirmed yet. Refresh or resume before paying."
+    }));
+  } catch (err) {
+    safeLogError("Smart request bridge execution error:", err);
+    res.status(err.statusCode || 500).json({
+      error: err.message,
+      ...(err.payload ? { payload: err.payload } : {})
+    });
+  }
+});
+
+app.post("/smart-requests/:id/bridge/resume", async (req, res) => {
+  try {
+    const store = readStore();
+    let smartRequest = await getSmartRequestByPublicId(store, req.params.id);
+    const payer = await resolveAuthorizedPayerForSmartRequest(store, req, smartRequest, req.body.payerEmail);
+    const balance = await getSmartRequestPayerBalance(smartRequest, payer.address);
+
+    if (smartRequest.bridge && balance.hasEnoughBalance && smartRequest.bridge.status !== "success") {
+      const now = new Date().toISOString();
+      smartRequest = normalizeSmartRequest({
+        ...smartRequest,
+        bridge: {
+          ...smartRequest.bridge,
+          status: "success",
+          updatedAt: now
+        },
+        updatedAt: now
+      });
+      await createSmartRequestRepo(store).save(smartRequest);
+      writeStore(store);
+    }
+
+    res.json(mapSmartRequestCheckoutResponse(smartRequest, {
+      bridge: smartRequest.bridge || null,
+      balance,
+      arcBalanceConfirmed: balance.hasEnoughBalance
+    }));
+  } catch (err) {
+    safeLogError("Smart request bridge resume error:", err);
+    res.status(err.statusCode || 500).json({
+      error: err.message,
+      ...(err.payload ? { payload: err.payload } : {})
+    });
+  }
+});
+
+app.post("/smart-requests/:id/check-allowance", async (req, res) => {
+  try {
+    const store = readStore();
+    let smartRequest = await getSmartRequestByPublicId(store, req.params.id);
+    const payer = await resolveAuthorizedPayerForSmartRequest(store, req, smartRequest, req.body.payerEmail);
+    smartRequest = await ensureSmartRequestOnchain(store, smartRequest);
+    const result = await getSmartRequestContractService().estimateTokenApproval({
+      walletId: payer.walletId,
+      walletAddress: payer.address,
+      walletAccountType: getCircleWalletAccountType(payer),
+      tokenAddress: smartRequest.tokenAddress,
+      spenderAddress: smartRequest.contractAddress,
+      amountBaseUnits: smartRequest.amountBaseUnits
+    });
+
+    if (!result.ok) {
+      return res.status(result.error.retryable ? 503 : 400).json({ error: result.error.message, payload: result.error });
+    }
+
+    res.json(mapSmartRequestCheckoutResponse(smartRequest, {
+      allowance: {
+        approvalRequired: result.data.approvalRequired,
+        allowanceBaseUnits: result.data.allowanceBaseUnits,
+        estimate: result.data.estimate
+      }
+    }));
+  } catch (err) {
+    safeLogError("Smart request allowance check error:", err);
+    res.status(err.statusCode || 500).json({
+      error: err.message,
+      ...(err.payload ? { payload: err.payload } : {})
+    });
+  }
+});
+
+app.post("/smart-requests/:id/approve-token", async (req, res) => {
+  try {
+    const store = readStore();
+    let smartRequest = await getSmartRequestByPublicId(store, req.params.id);
+    const payer = await resolveAuthorizedPayerForSmartRequest(store, req, smartRequest, req.body.payerEmail);
+    smartRequest = await ensureSmartRequestOnchain(store, smartRequest);
+    const result = await getSmartRequestContractService().approveSmartRequestToken({
+      walletId: payer.walletId,
+      walletAddress: payer.address,
+      walletAccountType: getCircleWalletAccountType(payer),
+      tokenAddress: smartRequest.tokenAddress,
+      spenderAddress: smartRequest.contractAddress,
+      amountBaseUnits: smartRequest.amountBaseUnits,
+      idempotencyKey: req.body.idempotencyKey || `smart-request-approve:${smartRequest.id}:${payer.walletId}`,
+      refId: `veloxpay-smart-request-approve:${smartRequest.id}`
+    });
+
+    if (!result.ok) {
+      return res.status(result.error.retryable ? 503 : 400).json({ error: result.error.message, payload: result.error });
+    }
+
+    res.json(mapSmartRequestCheckoutResponse(smartRequest, {
+      approval: mapCircleTransactionForPublic(result.data.transaction),
+      approvalSubmitted: result.data.approvalSubmitted,
+      allowanceBaseUnits: result.data.allowanceBaseUnits
+    }));
+  } catch (err) {
+    safeLogError("Smart request token approval error:", err);
+    res.status(err.statusCode || 500).json({
+      error: err.message,
+      ...(err.payload ? { payload: err.payload } : {})
+    });
+  }
+});
+
+app.post("/smart-requests/:id/pay", async (req, res) => {
+  try {
+    const store = readStore();
+    let smartRequest = await getSmartRequestByPublicId(store, req.params.id);
+    const payerEmail = normalizeEmail(req.body.payerEmail);
+    const payer = await resolveAuthorizedPayerForSmartRequest(store, req, smartRequest, payerEmail);
+    smartRequest = await ensureSmartRequestOnchain(store, smartRequest);
+    smartRequest = await refreshSmartRequestFromContract(store, smartRequest);
+
+    if (isSmartRequestFundingComplete(smartRequest)) {
+      return res.json(mapSmartRequestCheckoutResponse(smartRequest, {
+        completed: true,
+        transaction: buildStoredSmartRequestTransaction({
+          id: smartRequest.fundingTransactionId,
+          txHash: smartRequest.fundingTransactionHash,
+          blockchain: smartRequest.chain
+        }),
+        onchainRequest: { status: smartRequest.onchainStatus },
+        message: "Smart Request payment is already verified on Arc."
+      }));
+    }
+
+    const balance = await getSmartRequestPayerBalance(smartRequest, payer.address);
+
+    if (!balance.hasEnoughBalance) {
+      return res.status(402).json({
+        error: `Insufficient ${smartRequest.currency}. Have ${balance.balance} ${smartRequest.currency}, need ${smartRequest.amount} ${smartRequest.currency}.`,
+        balance,
+        smartRequest
+      });
+    }
+
+    const result = await getSmartRequestContractService().executeSmartRequestPayment({
+      walletId: payer.walletId,
+      walletAddress: payer.address,
+      walletAccountType: getCircleWalletAccountType(payer),
+      contractAddress: smartRequest.contractAddress,
+      requestId: smartRequest.onchainRequestId,
+      approvalIdempotencyKey: req.body.approvalIdempotencyKey || `smart-request-approve:${smartRequest.id}:${payer.walletId}`,
+      paymentIdempotencyKey: req.body.paymentIdempotencyKey || req.body.idempotencyKey || `smart-request-pay:${smartRequest.id}:${payer.walletId}`,
+      refId: `veloxpay-smart-request-pay:${smartRequest.id}`
+    });
+
+    if (!result.ok) {
+      const refreshed = await refreshSmartRequestFromContract(store, smartRequest);
+      if (isSmartRequestFundingComplete(refreshed)) {
+        return res.json(mapSmartRequestCheckoutResponse(refreshed, {
+          completed: true,
+          transaction: buildStoredSmartRequestTransaction({
+            id: refreshed.fundingTransactionId,
+            txHash: refreshed.fundingTransactionHash,
+            blockchain: refreshed.chain
+          }),
+          onchainRequest: { status: refreshed.onchainStatus },
+          message: "Smart Request payment is already verified on Arc."
+        }));
+      }
+
+      const updatedFailure = normalizeSmartRequest({
+        ...smartRequest,
+        offchainStatus: "recovery_required",
+        error: {
+          code: result.error.code,
+          message: result.error.message,
+          at: new Date().toISOString()
+        },
+        recovery: {
+          retryable: result.error.retryable,
+          attempts: Number(smartRequest.recovery?.attempts || 0) + 1,
+          nextAction: result.error.retryable ? "resume_or_retry_payment" : "contact_support",
+          lastAttemptAt: new Date().toISOString()
+        },
+        updatedAt: new Date().toISOString()
+      });
+      await createSmartRequestRepo(store).save(updatedFailure);
+      writeStore(store);
+      return res.status(result.error.retryable ? 503 : 400).json({ error: result.error.message, payload: result.error, smartRequest: updatedFailure });
+    }
+
+    const verifiedRequest = result.data.request;
+    const fundingTransaction = mapCircleTransactionForPublic(result.data.transaction);
+    const paymentId = crypto.randomUUID();
+    const completedAt = new Date().toISOString();
+    const updated = normalizeSmartRequest({
+      ...smartRequest,
+      actualPayerEmail: payerEmail,
+      actualPayerWalletId: payer.walletId,
+      actualPayerWalletAddress: payer.address,
+      fundingTransactionId: fundingTransaction?.id || "",
+      fundingTransactionHash: fundingTransaction?.txHash || "",
+      offchainStatus: verifiedRequest.status === "funded" ? "funded" : "settled",
+      onchainStatus: verifiedRequest.status,
+      updatedAt: completedAt,
+      error: null,
+      recovery: null
+    });
+    const payment = {
+      id: paymentId,
+      linkId: smartRequest.paymentLinkId,
+      linkLabel: `Smart Request ${smartRequest.id}`,
+      ownerEmail: smartRequest.creatorUserId,
+      amount: smartRequest.amount,
+      currency: smartRequest.currency,
+      status: "completed",
+      payerEmail,
+      customerName: "",
+      recipientAddress: smartRequest.contractAddress,
+      transactionHash: fundingTransaction?.txHash || "",
+      explorerUrl: fundingTransaction?.explorerUrl || "",
+      memo: smartRequest.description || "",
+      memoReference: `veloxpay-smart-request:${smartRequest.id}:${paymentId}`,
+      memoMode: "smart-request",
+      receiptUrl: buildReceiptUrl(paymentId, smartRequest.creatorUserId),
+      paidAt: completedAt,
+      createdAt: completedAt,
+      timeline: [
+        createTimelineEvent("sent", "Smart Request created"),
+        createTimelineEvent("code_requested", "Payer verified", `Verified ${payerEmail}`),
+        createTimelineEvent("paid", "Smart Request payment verified on Arc", `${smartRequest.amount} ${smartRequest.currency}`)
+      ]
+    };
+
+    await createSmartRequestRepo(store).save(updated);
+    store.payments.unshift(payment);
+    await savePersistentPayment(payment);
+    const paymentLink = await resolvePaymentLink(store, { linkId: smartRequest.paymentLinkId });
+    if (paymentLink) {
+      appendTimelineEvent(paymentLink, "paid", "Smart Request payment verified on Arc", `${smartRequest.amount} ${smartRequest.currency}`);
+      paymentLink.lastPaidAt = completedAt;
+      await syncStoredPaymentLink(store, paymentLink);
+    }
+    writeStore(store);
+
+    res.json(mapSmartRequestCheckoutResponse(updated, {
+      approval: mapCircleTransactionForPublic(result.data.approval?.transaction),
+      payment: mapStoredPayment(payment),
+      transaction: fundingTransaction,
+      onchainRequest: verifiedRequest
+    }));
+  } catch (err) {
+    safeLogError("Smart request payment error:", err);
+    res.status(err.statusCode || 500).json({
+      error: err.message,
+      ...(err.payload ? { payload: err.payload } : {})
+    });
+  }
+});
+
+app.post("/smart-requests/:id/resume", async (req, res) => {
+  try {
+    const store = readStore();
+    let smartRequest = await getSmartRequestByPublicId(store, req.params.id);
+    const payer = await resolveAuthorizedPayerForSmartRequest(store, req, smartRequest, req.body.payerEmail);
+    smartRequest = await ensureSmartRequestOnchain(store, smartRequest);
+    const contractService = getSmartRequestContractService();
+    const approvalTransactionId = String(req.body.approvalTransactionId || "").trim();
+    const paymentTransactionId = String(req.body.paymentTransactionId || "").trim();
+    const approval = approvalTransactionId
+      ? await contractService.waitForCircleTransaction({
+        transactionId: approvalTransactionId,
+        walletId: payer.walletId,
+        walletAccountType: getCircleWalletAccountType(payer)
+      })
+      : null;
+    const paymentTransaction = paymentTransactionId
+      ? await contractService.waitForCircleTransaction({
+        transactionId: paymentTransactionId,
+        walletId: payer.walletId,
+        walletAccountType: getCircleWalletAccountType(payer)
+      })
+      : null;
+
+    if (approval && !approval.ok) {
+      return res.status(approval.error.retryable ? 503 : 400).json({ error: approval.error.message, payload: approval.error, smartRequest });
+    }
+
+    if (paymentTransaction && !paymentTransaction.ok) {
+      return res.status(paymentTransaction.error.retryable ? 503 : 400).json({ error: paymentTransaction.error.message, payload: paymentTransaction.error, smartRequest });
+    }
+
+    const verified = await contractService.getSmartRequestFromContract({
+      contractAddress: smartRequest.contractAddress,
+      requestId: smartRequest.onchainRequestId
+    });
+
+    if (!verified.ok) {
+      return res.status(verified.error.retryable ? 503 : 400).json({ error: verified.error.message, payload: verified.error, smartRequest });
+    }
+
+    const expectedCompletedStatus = smartRequest.mode === "protected" ? "funded" : "settled";
+    const updated = normalizeSmartRequest({
+      ...smartRequest,
+      actualPayerEmail: payer.email,
+      actualPayerWalletId: payer.walletId,
+      actualPayerWalletAddress: payer.address,
+      fundingTransactionId: paymentTransaction?.data?.id || smartRequest.fundingTransactionId,
+      fundingTransactionHash: paymentTransaction?.data?.txHash || smartRequest.fundingTransactionHash,
+      offchainStatus: verified.data.status === expectedCompletedStatus
+        ? (verified.data.status === "funded" ? "funded" : "settled")
+        : smartRequest.offchainStatus,
+      onchainStatus: verified.data.status,
+      updatedAt: new Date().toISOString()
+    });
+
+    await createSmartRequestRepo(store).save(updated);
+    writeStore(store);
+
+    res.json(mapSmartRequestCheckoutResponse(updated, {
+      approval: mapCircleTransactionForPublic(approval?.data),
+      transaction: mapCircleTransactionForPublic(paymentTransaction?.data),
+      onchainRequest: verified.data,
+      completed: verified.data.status === expectedCompletedStatus
+    }));
+  } catch (err) {
+    safeLogError("Smart request resume error:", err);
+    res.status(err.statusCode || 500).json({
+      error: err.message,
+      ...(err.payload ? { payload: err.payload } : {})
+    });
+  }
+});
+
+app.get("/smart-requests/protected", async (req, res) => {
+  try {
+    const actorEmail = normalizeEmail(req.query.email);
+    const role = String(req.query.role || "payee").trim().toLowerCase();
+
+    if (!actorEmail) {
+      return res.status(400).json({ error: "Email is required" });
+    }
+
+    requireWalletSession(req, actorEmail);
+
+    if (!["payer", "payee"].includes(role)) {
+      return res.status(400).json({ error: "Role must be payer or payee" });
+    }
+
+    const store = readStore();
+    const repository = createSmartRequestRepo(store);
+    const requests = role === "payer"
+      ? await repository.listByPayerEmail(actorEmail)
+      : await repository.listByCreatorUserId(actorEmail);
+    const protectedRequests = await Promise.all(
+      requests
+        .filter((request) => request.mode === "protected")
+        .filter((request) => ["funded", "submitted"].includes(request.offchainStatus) || ["funded", "submitted"].includes(request.onchainStatus))
+        .map((request) => refreshSmartRequestFromContract(store, request))
+    );
+
+    res.json({
+      role,
+      smartRequests: protectedRequests.map((request) => mapProtectedSmartRequestForUser(request, actorEmail))
+    });
+  } catch (err) {
+    safeLogError("List protected smart requests error:", err);
+    res.status(err.statusCode || 500).json({ error: err.message });
+  }
+});
+
+app.post("/smart-requests/:id/submit-deliverable", async (req, res) => {
+  try {
+    const actorEmail = normalizeEmail(req.body.actorEmail);
+    const deliverableUrl = requireHttpUrl(req.body.deliverableUrl, "Deliverable URL");
+    const note = String(req.body.note || "").trim();
+
+    if (!actorEmail) {
+      return res.status(400).json({ error: "Actor email is required" });
+    }
+
+    requireWalletSession(req, actorEmail);
+
+    const store = readStore();
+    const repository = createSmartRequestRepo(store);
+    let smartRequest = await getSmartRequestByPublicId(store, req.params.id);
+    smartRequest = await refreshSmartRequestFromContract(store, smartRequest);
+
+    if (!canSubmitProtectedDeliverable(smartRequest, actorEmail)) {
+      return res.status(403).json({ error: "Only the payee can submit a deliverable for a funded protected request." });
+    }
+
+    const creator = await getStoredUser(store, actorEmail);
+    const walletId = creator?.walletId || smartRequest.creatorWalletId;
+
+    if (!walletId || walletId === actorEmail) {
+      return res.status(409).json({ error: "Payee Circle wallet is required to submit the deliverable on-chain." });
+    }
+
+    const submittedAt = new Date().toISOString();
+    const deliverableRecord = buildDeliverableRecord({
+      smartRequest,
+      deliverableUrl,
+      note,
+      submittedBy: actorEmail,
+      submittedAt
+    });
+    const deliverableHash = hashDeliverableRecord(deliverableRecord);
+    const result = await getSmartRequestContractService().submitProtectedDeliverable({
+      walletId,
+      walletAccountType: getCircleWalletAccountType(creator),
+      contractAddress: smartRequest.contractAddress,
+      requestId: smartRequest.onchainRequestId,
+      deliverableHash,
+      idempotencyKey: req.body.idempotencyKey || `smart-request-deliverable:${smartRequest.id}:${deliverableHash}`,
+      refId: `veloxpay-smart-request-deliverable:${smartRequest.id}`
+    });
+
+    if (!result.ok) {
+      return res.status(result.error.retryable ? 503 : 400).json({ error: result.error.message, payload: result.error });
+    }
+
+    const transaction = mapCircleTransactionForPublic(result.data.transaction);
+    const updated = normalizeSmartRequest({
+      ...smartRequest,
+      deliverableUrl,
+      deliverableNote: note,
+      deliverableSubmittedAt: submittedAt,
+      deliverableRecordHash: deliverableHash,
+      deliverableHash,
+      deliverableTransactionId: transaction?.id || "",
+      deliverableTransactionHash: transaction?.txHash || "",
+      offchainStatus: "submitted",
+      onchainStatus: result.data.request.status,
+      updatedAt: submittedAt,
+      error: null,
+      recovery: null
+    });
+
+    await repository.save(updated);
+    writeStore(store);
+
+    res.json({
+      smartRequest: mapProtectedSmartRequestForUser(updated, actorEmail),
+      deliverableRecord,
+      deliverableHash,
+      transaction
+    });
+  } catch (err) {
+    safeLogError("Submit protected deliverable error:", err);
+    res.status(err.statusCode || 500).json({
+      error: err.message,
+      ...(err.payload ? { payload: err.payload } : {})
+    });
+  }
+});
+
+app.post("/smart-requests/:id/approve-release", async (req, res) => {
+  try {
+    const actorEmail = normalizeEmail(req.body.actorEmail);
+
+    if (!actorEmail) {
+      return res.status(400).json({ error: "Actor email is required" });
+    }
+
+    requireWalletSession(req, actorEmail);
+
+    const store = readStore();
+    const repository = createSmartRequestRepo(store);
+    let smartRequest = await getSmartRequestByPublicId(store, req.params.id);
+    smartRequest = await refreshSmartRequestFromContract(store, smartRequest);
+
+    if (!canApproveProtectedRelease(smartRequest, actorEmail)) {
+      return res.status(403).json({ error: "Only the verified payer can release a submitted protected request." });
+    }
+
+    const payer = await resolveAuthorizedPayerForSmartRequest(store, req, smartRequest, actorEmail);
+    const result = await getSmartRequestContractService().approveAndReleaseProtectedPayment({
+      walletId: payer.walletId,
+      walletAccountType: getCircleWalletAccountType(payer),
+      contractAddress: smartRequest.contractAddress,
+      requestId: smartRequest.onchainRequestId,
+      idempotencyKey: req.body.idempotencyKey || `smart-request-release:${smartRequest.id}:${payer.walletId}`,
+      refId: `veloxpay-smart-request-release:${smartRequest.id}`
+    });
+
+    if (!result.ok) {
+      return res.status(result.error.retryable ? 503 : 400).json({ error: result.error.message, payload: result.error });
+    }
+
+    const transaction = mapCircleTransactionForPublic(result.data.transaction);
+    const updated = normalizeSmartRequest({
+      ...smartRequest,
+      releaseTransactionId: transaction?.id || "",
+      releaseTransactionHash: transaction?.txHash || "",
+      offchainStatus: "settled",
+      onchainStatus: result.data.request.status,
+      updatedAt: new Date().toISOString(),
+      error: null,
+      recovery: null
+    });
+
+    await repository.save(updated);
+    writeStore(store);
+
+    res.json({
+      smartRequest: mapProtectedSmartRequestForUser(updated, actorEmail),
+      transaction
+    });
+  } catch (err) {
+    safeLogError("Approve protected release error:", err);
+    res.status(err.statusCode || 500).json({
+      error: err.message,
+      ...(err.payload ? { payload: err.payload } : {})
+    });
+  }
+});
+
+app.post("/smart-requests/:id/claim-expired-refund", async (req, res) => {
+  try {
+    const actorEmail = normalizeEmail(req.body.actorEmail);
+
+    if (!actorEmail) {
+      return res.status(400).json({ error: "Actor email is required" });
+    }
+
+    requireWalletSession(req, actorEmail);
+
+    const store = readStore();
+    const repository = createSmartRequestRepo(store);
+    let smartRequest = await getSmartRequestByPublicId(store, req.params.id);
+    smartRequest = await refreshSmartRequestFromContract(store, smartRequest);
+
+    if (!canClaimExpiredProtectedRefund(smartRequest, actorEmail)) {
+      return res.status(403).json({ error: "This protected request is not eligible for an expired payer refund." });
+    }
+
+    const payer = await resolveAuthorizedPayerForSmartRequest(store, req, smartRequest, actorEmail);
+    const result = await getSmartRequestContractService().refundProtectedPayment({
+      walletId: payer.walletId,
+      walletAccountType: getCircleWalletAccountType(payer),
+      contractAddress: smartRequest.contractAddress,
+      requestId: smartRequest.onchainRequestId,
+      refundMode: "expired",
+      idempotencyKey: req.body.idempotencyKey || `smart-request-expired-refund:${smartRequest.id}:${payer.walletId}`,
+      refId: `veloxpay-smart-request-expired-refund:${smartRequest.id}`
+    });
+
+    if (!result.ok) {
+      return res.status(result.error.retryable ? 503 : 400).json({ error: result.error.message, payload: result.error });
+    }
+
+    const transaction = mapCircleTransactionForPublic(result.data.transaction);
+    const updated = normalizeSmartRequest({
+      ...smartRequest,
+      refundTransactionId: transaction?.id || "",
+      refundTransactionHash: transaction?.txHash || "",
+      offchainStatus: "refunded",
+      onchainStatus: result.data.request.status,
+      updatedAt: new Date().toISOString(),
+      error: null,
+      recovery: null
+    });
+
+    await repository.save(updated);
+    writeStore(store);
+
+    res.json({
+      smartRequest: mapProtectedSmartRequestForUser(updated, actorEmail),
+      transaction
+    });
+  } catch (err) {
+    safeLogError("Claim protected refund error:", err);
+    res.status(err.statusCode || 500).json({
+      error: err.message,
+      ...(err.payload ? { payload: err.payload } : {})
+    });
   }
 });
 

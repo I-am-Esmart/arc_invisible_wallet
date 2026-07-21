@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { PaymentsTable } from "@/components/dashboard/payments-table";
+import { ProtectedRequestsPanel } from "@/components/payment/protected-requests-panel";
 import { WalletRequiredState } from "@/components/wallet/wallet-required-state";
 import { useVeloxPayData } from "@/components/wallet/use-veloxpay-data";
 import { listPayments } from "@/lib/api/payments";
@@ -125,6 +126,8 @@ export default function PaymentsPage() {
         description={activeCopy.description}
         emptyMessage={activeCopy.emptyMessage}
       />
+
+      <ProtectedRequestsPanel walletUser={walletUser} />
     </main>
   );
 }
