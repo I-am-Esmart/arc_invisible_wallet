@@ -746,7 +746,22 @@ function resolveFee(context, input = {}) {
 }
 
 function resolveIdempotencyKey(value) {
-  return value || crypto.randomUUID();
+  const normalized = String(value || "").trim();
+
+  if (!normalized) {
+    return crypto.randomUUID();
+  }
+
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(normalized)) {
+    return normalized;
+  }
+
+  const bytes = crypto.createHash("sha256").update(normalized).digest();
+  bytes[6] = (bytes[6] & 0x0f) | 0x50;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = bytes.subarray(0, 16).toString("hex");
+
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
 }
 
 function normalizeMode(value) {

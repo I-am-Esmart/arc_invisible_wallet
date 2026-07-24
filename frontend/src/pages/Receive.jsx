@@ -4,16 +4,17 @@ import { useNavigate } from "react-router-dom"
 import { fetchBalance } from "../lib/api"
 
 export default function Receive() {
-  const [address, setAddress] = useState("")
+  const [address, setAddress] = useState(() => {
+    const user = JSON.parse(localStorage.getItem("user"))
+    return user?.address || ""
+  })
   const [copied, setCopied] = useState(false)
 
   const [error, setError] = useState("")
   const navigate = useNavigate()
 
   useEffect(() => {
-    const user = JSON.parse(localStorage.getItem("user"))
-    if (user?.address) {
-      setAddress(user.address)
+    if (address) {
       return
     }
 
@@ -22,13 +23,13 @@ export default function Receive() {
         setError("")
         const data = await fetchBalance()
         setAddress(data.address)
-      } catch (err) {
+      } catch {
         setError("Unable to load address")
       }
     }
 
     loadAddress()
-  }, [])
+  }, [address])
 
 
   function copyAddress() {

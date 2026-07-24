@@ -1,9 +1,11 @@
 {
   "users": {},
   "wallets": {},
+  "walletSetId": null,
   "txs": [],
   "paymentLinks": [],
   "smartRequests": [],
   "payments": [],
-  "paymentAuthSessions": []
+  "paymentAuthSessions": [],
+  "customers": []
 }

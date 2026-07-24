@@ -20,6 +20,7 @@ const {
   canApproveProtectedRelease,
   canClaimExpiredProtectedRefund,
   canPayerAccessSmartRequest,
+  canRefundProtectedByCreator,
   canSubmitProtectedDeliverable,
   createSmartRequestRepository,
   hashDeliverableRecord,
@@ -33,6 +34,10 @@ const {
 const {
   createSmartRequestBridgeService
 } = require("./smart-request-bridge-service");
+const {
+  buildSmartRequestContractConfig,
+  requireSmartRequestContractConfig
+} = require("./smart-request-config");
 
 const ERC20_ABI = [
   "function balanceOf(address owner) view returns (uint256)",
@@ -92,6 +97,7 @@ const RESEND_API_URL = "https://api.resend.com/emails";
 const PERSISTENT_KV_URL = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL || "";
 const PERSISTENT_KV_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN || "";
 const HAS_PERSISTENT_KV = Boolean(PERSISTENT_KV_URL && PERSISTENT_KV_TOKEN);
+const IS_SERVERLESS_TEMP_STORE = Boolean(process.env.VERCEL && !process.env.STORE_PATH && !HAS_PERSISTENT_KV);
 const LINK_CURRENCY_CODES = {
   USDC: "1",
   EURC: "2"
@@ -111,6 +117,7 @@ const ENABLE_CIRCLE_GAS_STATION = String(process.env.CIRCLE_GAS_STATION_ENABLED 
 const ENABLE_USER_CONTROLLED_WALLETS = Boolean(process.env.CIRCLE_USER_CONTROLLED_APP_ID);
 const ENABLE_ARC_APP_KIT = Boolean(ARC_APP_KIT_KEY);
 const ENABLE_ARC_APP_KIT_EXECUTION = Boolean(ARC_APP_KIT_KEY && CIRCLE_API_KEY && CIRCLE_ENTITY_SECRET);
+const SMART_REQUEST_CONTRACT_CONFIG = buildSmartRequestContractConfig(VELOXPAY_REQUESTS_CONTRACT_ADDRESS);
 const circleWalletsClient = ENABLE_CIRCLE_WALLETS
   ? initiateDeveloperControlledWalletsClient({
       apiKey: CIRCLE_API_KEY,
@@ -500,6 +507,8 @@ function buildFeatureCapabilities() {
     payments: {
       links: true,
       receipts: true,
+      smartRequests: SMART_REQUEST_CONTRACT_CONFIG.available,
+      smartRequestsMessage: SMART_REQUEST_CONTRACT_CONFIG.message,
       recurringRequests: true,
       batchTransfers: true,
       nativeBatchTransfers: true,
@@ -535,8 +544,10 @@ function buildReadinessReport() {
     },
     {
       id: "persistent_storage",
-      ok: HAS_PERSISTENT_KV,
-      message: "Set UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN for durable production storage."
+      ok: HAS_PERSISTENT_KV || !IS_SERVERLESS_TEMP_STORE,
+      message: IS_SERVERLESS_TEMP_STORE
+        ? "Serverless production writes require UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN; /tmp storage is not durable."
+        : "Set UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN for durable production storage."
     },
     {
       id: "circle_developer_wallets",
@@ -562,6 +573,11 @@ function buildReadinessReport() {
       id: "app_kit_execution",
       ok: ENABLE_ARC_APP_KIT_EXECUTION,
       message: "Set ARC_APP_KIT_KEY, CIRCLE_API_KEY, and CIRCLE_ENTITY_SECRET for live bridge, swap, and Unified Balance execution."
+    },
+    {
+      id: "smart_request_contract",
+      ok: SMART_REQUEST_CONTRACT_CONFIG.available,
+      message: SMART_REQUEST_CONTRACT_CONFIG.message
     },
     {
       id: "user_controlled_wallets",
@@ -984,6 +1000,12 @@ function readStore() {
 }
 
 function writeStore(store) {
+  if (IS_SERVERLESS_TEMP_STORE) {
+    const error = new Error("Durable storage is required for VeloxPay production writes. Configure Upstash Redis or KV_REST_API credentials.");
+    error.statusCode = 503;
+    throw error;
+  }
+
   ensureStoreFile();
   fs.writeFileSync(STORE_PATH, JSON.stringify(store, null, 2));
 }
@@ -2199,7 +2221,9 @@ function verifyPaymentChallengeForSmartRequest({ linkId, payerEmail, verificatio
     throw error;
   }
 
-  if (challenge.linkId !== linkId) {
+  const linkTokenMatches = Boolean(challenge.linkToken && linkToken && challenge.linkToken === linkToken);
+
+  if (challenge.linkId !== linkId && !linkTokenMatches) {
     const error = new Error("Verification session does not match this payment link.");
     error.statusCode = 400;
     throw error;
@@ -2211,7 +2235,7 @@ function verifyPaymentChallengeForSmartRequest({ linkId, payerEmail, verificatio
     throw error;
   }
 
-  if (challenge.linkToken && linkToken && challenge.linkToken !== linkToken) {
+  if (challenge.linkToken && linkToken && !linkTokenMatches) {
     const error = new Error("Verification session does not match this payment link token.");
     error.statusCode = 400;
     throw error;
@@ -2262,6 +2286,7 @@ async function ensureSmartRequestOnchain(store, smartRequest) {
     return smartRequest;
   }
 
+  const contractConfig = requireSmartRequestContractConfig(VELOXPAY_REQUESTS_CONTRACT_ADDRESS);
   const smartRequestRepository = createSmartRequestRepo(store);
   const contractService = getSmartRequestContractService();
   const creator = await getStoredUser(store, smartRequest.creatorUserId);
@@ -2269,7 +2294,7 @@ async function ensureSmartRequestOnchain(store, smartRequest) {
   const result = await contractService.createOnchainSmartRequest({
     walletId: smartRequest.creatorWalletId,
     walletAccountType: getCircleWalletAccountType(creator),
-    contractAddress: smartRequest.contractAddress || VELOXPAY_REQUESTS_CONTRACT_ADDRESS,
+    contractAddress: smartRequest.contractAddress || contractConfig.contractAddress,
     externalPaymentId: smartRequest.externalPaymentId,
     tokenAddress: smartRequest.tokenAddress,
     amountBaseUnits: smartRequest.amountBaseUnits,
@@ -3176,6 +3201,7 @@ app.post("/create-wallet", async (req, res) => {
     const user = await ensureUserRecord(store, { email });
 
     if (user.walletAddress) {
+      writeStore(store);
       return res.json(mapStoredUser(user));
     }
 
@@ -3425,6 +3451,8 @@ app.post("/smart-requests", async (req, res) => {
       return res.status(400).json({ error: "Payment type must be standard, split, or protected" });
     }
 
+    const contractConfig = requireSmartRequestContractConfig(VELOXPAY_REQUESTS_CONTRACT_ADDRESS);
+
     if (!amount) {
       return res.status(400).json({ error: "Amount is required" });
     }
@@ -3498,7 +3526,7 @@ app.post("/smart-requests", async (req, res) => {
       id,
       paymentLinkId: paymentLink.id,
       externalPaymentId: buildExternalPaymentId(id),
-      contractAddress: VELOXPAY_REQUESTS_CONTRACT_ADDRESS || "0x0000000000000000000000000000000000000000",
+      contractAddress: contractConfig.contractAddress,
       chain: CIRCLE_BLOCKCHAIN,
       mode,
       currency: tokenConfig.symbol,
@@ -4824,6 +4852,14 @@ app.post("/smart-requests/:id/approve-release", async (req, res) => {
     });
 
     await repository.save(updated);
+    const payment = store.payments.find((entry) => entry.linkId === smartRequest.paymentLinkId);
+    if (payment) {
+      payment.releaseTransactionHash = updated.releaseTransactionHash;
+      payment.settledAt = updated.updatedAt;
+      payment.timeline = payment.timeline || [];
+      payment.timeline.push(createTimelineEvent("settled", "Protected payment released", updated.releaseTransactionHash || updated.releaseTransactionId));
+      await savePersistentPayment(payment);
+    }
     writeStore(store);
 
     res.json({
@@ -4886,6 +4922,15 @@ app.post("/smart-requests/:id/claim-expired-refund", async (req, res) => {
     });
 
     await repository.save(updated);
+    const payment = store.payments.find((entry) => entry.linkId === smartRequest.paymentLinkId);
+    if (payment) {
+      payment.status = "refunded";
+      payment.refundTransactionHash = updated.refundTransactionHash;
+      payment.refundedAt = updated.updatedAt;
+      payment.timeline = payment.timeline || [];
+      payment.timeline.push(createTimelineEvent("refunded", "Protected payment refunded", updated.refundTransactionHash || updated.refundTransactionId));
+      await savePersistentPayment(payment);
+    }
     writeStore(store);
 
     res.json({
@@ -4894,6 +4939,83 @@ app.post("/smart-requests/:id/claim-expired-refund", async (req, res) => {
     });
   } catch (err) {
     safeLogError("Claim protected refund error:", err);
+    res.status(err.statusCode || 500).json({
+      error: err.message,
+      ...(err.payload ? { payload: err.payload } : {})
+    });
+  }
+});
+
+app.post("/smart-requests/:id/refund-by-creator", async (req, res) => {
+  try {
+    const actorEmail = normalizeEmail(req.body.actorEmail);
+
+    if (!actorEmail) {
+      return res.status(400).json({ error: "Actor email is required" });
+    }
+
+    requireWalletSession(req, actorEmail);
+
+    const store = readStore();
+    const repository = createSmartRequestRepo(store);
+    let smartRequest = await getSmartRequestByPublicId(store, req.params.id);
+    smartRequest = await refreshSmartRequestFromContract(store, smartRequest);
+
+    if (!canRefundProtectedByCreator(smartRequest, actorEmail)) {
+      return res.status(403).json({ error: "Only the payee can refund a funded protected request before deliverable submission." });
+    }
+
+    const creator = await getStoredUser(store, actorEmail);
+    const walletId = creator?.walletId || smartRequest.creatorWalletId;
+
+    if (!walletId || walletId === actorEmail) {
+      return res.status(409).json({ error: "Payee Circle wallet is required to refund the protected request on-chain." });
+    }
+
+    const result = await getSmartRequestContractService().refundProtectedPayment({
+      walletId,
+      walletAccountType: getCircleWalletAccountType(creator),
+      contractAddress: smartRequest.contractAddress,
+      requestId: smartRequest.onchainRequestId,
+      refundMode: "creator",
+      idempotencyKey: req.body.idempotencyKey || `smart-request-creator-refund:${smartRequest.id}:${walletId}`,
+      refId: `veloxpay-smart-request-creator-refund:${smartRequest.id}`
+    });
+
+    if (!result.ok) {
+      return res.status(result.error.retryable ? 503 : 400).json({ error: result.error.message, payload: result.error });
+    }
+
+    const transaction = mapCircleTransactionForPublic(result.data.transaction);
+    const updated = normalizeSmartRequest({
+      ...smartRequest,
+      refundTransactionId: transaction?.id || "",
+      refundTransactionHash: transaction?.txHash || "",
+      offchainStatus: "refunded",
+      onchainStatus: result.data.request.status,
+      updatedAt: new Date().toISOString(),
+      error: null,
+      recovery: null
+    });
+
+    await repository.save(updated);
+    const payment = store.payments.find((entry) => entry.linkId === smartRequest.paymentLinkId);
+    if (payment) {
+      payment.status = "refunded";
+      payment.refundTransactionHash = updated.refundTransactionHash;
+      payment.refundedAt = updated.updatedAt;
+      payment.timeline = payment.timeline || [];
+      payment.timeline.push(createTimelineEvent("refunded", "Protected payment refunded", updated.refundTransactionHash || updated.refundTransactionId));
+      await savePersistentPayment(payment);
+    }
+    writeStore(store);
+
+    res.json({
+      smartRequest: mapProtectedSmartRequestForUser(updated, actorEmail),
+      transaction
+    });
+  } catch (err) {
+    safeLogError("Creator protected refund error:", err);
     res.status(err.statusCode || 500).json({
       error: err.message,
       ...(err.payload ? { payload: err.payload } : {})

@@ -15,7 +15,7 @@ export default function Home() {
       const bal = await getBalance(res.address)
       setBalance(bal.balance)
       alert("Wallet created successfully!")
-    } catch (err) {
+    } catch {
       alert("Error creating wallet")
     } finally {
       setLoading(false)

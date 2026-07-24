@@ -7,6 +7,7 @@ const {
   canApproveProtectedRelease,
   canClaimExpiredProtectedRefund,
   canPayerAccessSmartRequest,
+  canRefundProtectedByCreator,
   canSubmitProtectedDeliverable,
   calculateRecipientAmounts,
   canonicalJson,
@@ -308,6 +309,9 @@ test("protected request permissions follow role and status transitions", () => {
   assert.equal(canSubmitProtectedDeliverable(funded, "creator@example.com"), true);
   assert.equal(canSubmitProtectedDeliverable(funded, "payer@example.com"), false);
   assert.equal(canSubmitProtectedDeliverable(submitted, "creator@example.com"), false);
+  assert.equal(canRefundProtectedByCreator(funded, "creator@example.com"), true);
+  assert.equal(canRefundProtectedByCreator(funded, "payer@example.com"), false);
+  assert.equal(canRefundProtectedByCreator(submitted, "creator@example.com"), false);
   assert.equal(canApproveProtectedRelease(submitted, "payer@example.com"), true);
   assert.equal(canApproveProtectedRelease(submitted, "creator@example.com"), false);
   assert.equal(canApproveProtectedRelease(funded, "payer@example.com"), false);

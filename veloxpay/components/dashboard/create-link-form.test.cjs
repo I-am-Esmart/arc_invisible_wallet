@@ -55,6 +55,14 @@ function loadCreateLinkForm() {
       return { createPaymentLink: async () => ({}) };
     }
 
+    if (id === "@/lib/api/features") {
+      return {
+        fetchFeatureCapabilities: async () => ({
+          payments: { smartRequests: true, smartRequestsMessage: "" },
+        }),
+      };
+    }
+
     if (id === "@/lib/api/smart-requests") {
       return { createSmartRequest: async () => ({}) };
     }

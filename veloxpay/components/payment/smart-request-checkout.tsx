@@ -63,6 +63,7 @@ const PHASES: Array<{ id: CheckoutPhase; label: string }> = [
   { id: "verifying_onchain", label: "verifying onchain request status" },
   { id: "completed", label: "completed" },
 ];
+const SHOW_PRIMARY_BRIDGE_FLOW = false;
 
 function storageKey(smartRequestId: string) {
   return `veloxpay_smart_request_checkout:${smartRequestId}`;
@@ -509,7 +510,7 @@ export function SmartRequestCheckout({
         )}
       </div>
 
-      {smartRequest.currency === "USDC" && !completed ? (
+      {SHOW_PRIMARY_BRIDGE_FLOW && smartRequest.currency === "USDC" && !completed ? (
         <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-700">
           <input
             type="checkbox"

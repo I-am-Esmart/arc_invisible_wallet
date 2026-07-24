@@ -58,8 +58,18 @@ async function main() {
     return;
   }
 
+  const usdcAddress = requireAddress("VELOXPAY_ARC_TESTNET_USDC_ADDRESS");
+  const eurcAddress = requireAddress("VELOXPAY_ARC_TESTNET_EURC_ADDRESS");
+  if (usdcAddress === eurcAddress) {
+    throw new Error("VELOXPAY_ARC_TESTNET_USDC_ADDRESS and VELOXPAY_ARC_TESTNET_EURC_ADDRESS must be different Arc Testnet token contracts.");
+  }
+
   if (dryRun) {
     console.log("Arc Testnet deployment dry run complete. Required environment variables are present.");
+    console.log(`Network: ${NETWORK}`);
+    console.log(`Chain ID: ${CHAIN_ID}`);
+    console.log("Constructor parameters: [<deploying wallet address from VELOXPAY_ARC_TESTNET_DEPLOYER_WALLET_ID>]");
+    console.log(`Supported tokens: USDC=${usdcAddress}, EURC=${eurcAddress}`);
     console.log("No Circle API calls were made because --dry-run was supplied.");
     return;
   }
@@ -70,8 +80,6 @@ async function main() {
     );
   }
 
-  const usdcAddress = requireAddress("VELOXPAY_ARC_TESTNET_USDC_ADDRESS");
-  const eurcAddress = requireAddress("VELOXPAY_ARC_TESTNET_EURC_ADDRESS");
   const walletId = process.env.VELOXPAY_ARC_TESTNET_DEPLOYER_WALLET_ID;
   const feeLevel = process.env.VELOXPAY_ARC_TESTNET_FEE_LEVEL || "MEDIUM";
   const buildArtifact = JSON.parse(readFileSync(buildArtifactPath, "utf8"));
@@ -105,7 +113,7 @@ async function main() {
   const deployResponse = await contractsClient.deployContract({
     idempotencyKey: process.env.VELOXPAY_ARC_TESTNET_DEPLOY_IDEMPOTENCY_KEY,
     name: CONTRACT_NAME,
-    description: "VeloxPay programmable payment requests for standard, split, and protected ERC-20 payments.",
+    description: "VeloxPay programmable payment requests for standard split and protected ERC20 payments",
     blockchain: NETWORK,
     walletId,
     abiJson: JSON.stringify(buildArtifact.abi),
@@ -163,6 +171,7 @@ async function main() {
 
   const deploymentArtifact = {
     contractName: CONTRACT_NAME,
+    chain: NETWORK,
     network: NETWORK,
     chainId: CHAIN_ID,
     contractAddress: contract.contractAddress,
@@ -278,6 +287,9 @@ function requireAddress(name) {
   if (!ADDRESS_PATTERN.test(value || "")) {
     throw new Error(`${name} must be a 20-byte EVM address.`);
   }
+  if (/^0x0{40}$/i.test(value)) {
+    throw new Error(`${name} must not be the zero address.`);
+  }
   return value;
 }
 
@@ -291,11 +303,42 @@ function publicErrorMessage(error) {
   if (!error) {
     return "unknown error";
   }
+  const details = [];
+  if (error.code) {
+    details.push(`code=${error.code}`);
+  }
+  if (error.status) {
+    details.push(`status=${error.status}`);
+  }
+  if (error.response?.data?.code) {
+    details.push(`code=${error.response.data.code}`);
+  }
+  if (error.response?.status) {
+    details.push(`status=${error.response.status}`);
+  }
+  if (error.error?.response?.data?.code) {
+    details.push(`wrappedCode=${error.error.response.data.code}`);
+  }
+  if (error.error?.response?.status) {
+    details.push(`wrappedStatus=${error.error.response.status}`);
+  }
+  if (error.error?.response?.data?.errors) {
+    details.push(`errors=${JSON.stringify(error.error.response.data.errors)}`);
+  }
+  if (error.error?.response?.data?.details) {
+    details.push(`details=${JSON.stringify(error.error.response.data.details)}`);
+  }
   if (error.response?.data?.message) {
-    return error.response.data.message;
+    return [error.response.data.message, ...details].join(" ");
   }
   if (error.response?.data?.error) {
-    return error.response.data.error;
+    return [error.response.data.error, ...details].join(" ");
   }
-  return error.message || String(error);
+  if (error.error?.response?.data?.message) {
+    return [error.error.response.data.message, ...details].join(" ");
+  }
+  if (error.error?.response?.data?.error) {
+    return [error.error.response.data.error, ...details].join(" ");
+  }
+  return [error.message || String(error), ...details].join(" ");
 }

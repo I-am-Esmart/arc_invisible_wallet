@@ -212,7 +212,7 @@ test("Smart Request checkout source covers failure and refresh recovery states",
   assert.match(source, /quoteSmartRequestBridge/);
   assert.match(source, /executeSmartRequestBridge/);
   assert.match(source, /resumeSmartRequestBridge/);
-  assert.match(source, /Pay USDC from Ethereum Sepolia first/);
+  assert.match(source, /SHOW_PRIMARY_BRIDGE_FLOW = false/);
   assert.match(source, /Bridge stage/);
   assert.match(source, /confirming_arc_balance/);
 });

@@ -1,0 +1,36 @@
+{
+  "contractName": "VeloxPayRequests",
+  "chain": "ARC-TESTNET",
+  "network": "ARC-TESTNET",
+  "chainId": 5042002,
+  "contractAddress": "0x9db6d59108fe69e1b91ca877fff9997253fba92f",
+  "circleContractId": "019f95d9-b900-7b1b-9f4f-2f3cfbbcba6e",
+  "deploymentTransactionId": "7b87b861-3323-5ee8-a4cb-c91a2c8c960f",
+  "deploymentTransactionHash": "0x85bd41513f49697ef8d30043d4203e191a22baaacb249837bdf4343b471b3011",
+  "abiVersion": "VeloxPayRequests.v1",
+  "abiHash": "1917e0aa54f9e9c03db80bcbf5bc3d0e2c3b072a46e8a65d65695d592675e487",
+  "bytecodeHash": "000433d5286fb098d292a9797601491f7c5062da29ba22a30c33cdf5ca4e67db",
+  "deployedAt": "2026-07-24T20:38:43.113Z",
+  "deployerWalletId": "ddecc40b-c06f-5710-9a35-7a997325571b",
+  "deployerAddress": "0x21f4f5d7f1f76431f5beb03736976aa5a09a2cd6",
+  "supportedTokens": {
+    "USDC": "0x3600000000000000000000000000000000000000",
+    "EURC": "0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a"
+  },
+  "supportedTokenTransactions": [
+    {
+      "symbol": "USDC",
+      "tokenAddress": "0x3600000000000000000000000000000000000000",
+      "transactionId": "0a4a3fb5-b601-5e7f-bfc5-9f4d091588b6",
+      "transactionHash": "0x6d86513524c350c4b744d7479acd3d935f29c86f4d025df41b7a9fd045da9be8",
+      "state": "COMPLETE"
+    },
+    {
+      "symbol": "EURC",
+      "tokenAddress": "0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a",
+      "transactionId": "e31b520e-e95f-556d-9e1f-d016b6004b49",
+      "transactionHash": "0xb5d436485b20b54e48e1e607a76dc5beab27e113107833cfd092376ce8a24aa4",
+      "state": "COMPLETE"
+    }
+  ]
+}

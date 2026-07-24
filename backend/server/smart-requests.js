@@ -583,6 +583,19 @@ function canApproveProtectedRelease(smartRequest, actorEmail) {
   );
 }
 
+function canRefundProtectedByCreator(smartRequest, actorEmail) {
+  const actor = normalizeEmail(actorEmail);
+
+  return Boolean(
+    smartRequest?.mode === "protected" &&
+    actor &&
+    normalizeEmail(smartRequest.creatorUserId) === actor &&
+    smartRequest.offchainStatus === "funded" &&
+    smartRequest.onchainStatus === "funded" &&
+    !smartRequest.deliverableHash
+  );
+}
+
 function canClaimExpiredProtectedRefund(smartRequest, actorEmail, now = new Date()) {
   const actor = normalizeEmail(actorEmail);
   const dueAt = smartRequest?.dueDate ? new Date(smartRequest.dueDate).getTime() : Number.NaN;
@@ -971,6 +984,7 @@ module.exports = {
   canApproveProtectedRelease,
   canClaimExpiredProtectedRefund,
   canPayerAccessSmartRequest,
+  canRefundProtectedByCreator,
   canSubmitProtectedDeliverable,
   calculateRecipientAmounts,
   canonicalJson,

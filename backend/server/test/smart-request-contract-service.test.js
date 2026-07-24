@@ -14,6 +14,7 @@ const RECIPIENT = "0x3333333333333333333333333333333333333333";
 const BYTES32 = `0x${"a".repeat(64)}`;
 const METADATA_HASH = `0x${"b".repeat(64)}`;
 const DELIVERABLE_HASH = `0x${"c".repeat(64)}`;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function contractRequest(overrides = {}) {
   return {
@@ -240,10 +241,45 @@ test("approveSmartRequestToken submits exact ERC-20 approve signature when allow
 
   assert.equal(result.ok, true);
   assert.equal(result.data.approvalSubmitted, true);
-  assert.equal(circleWalletsClient.calls[0].idempotencyKey, "approve-key");
+  assert.match(circleWalletsClient.calls[0].idempotencyKey, UUID_PATTERN);
   assert.equal(circleWalletsClient.calls[0].contractAddress, TOKEN);
   assert.equal(circleWalletsClient.calls[0].abiFunctionSignature, ABI_SIGNATURES.approve);
   assert.deepEqual(circleWalletsClient.calls[0].abiParameters, [CONTRACT, "250000000"]);
+});
+
+test("Circle write idempotency keys are converted to stable UUIDs", async () => {
+  const firstClient = createCircleClient();
+  const secondClient = createCircleClient();
+  const firstService = createSmartRequestContractService({
+    circleWalletsClient: firstClient,
+    contractAddress: CONTRACT,
+    pollIntervalMs: 0,
+    allowanceReader: async () => "0"
+  });
+  const secondService = createSmartRequestContractService({
+    circleWalletsClient: secondClient,
+    contractAddress: CONTRACT,
+    pollIntervalMs: 0,
+    allowanceReader: async () => "0"
+  });
+
+  await firstService.approveSmartRequestToken({
+    walletId: "wallet-1",
+    walletAddress: WALLET,
+    tokenAddress: TOKEN,
+    amountBaseUnits: "250000000",
+    idempotencyKey: "smart-request-approve:request-1:wallet-1"
+  });
+  await secondService.approveSmartRequestToken({
+    walletId: "wallet-1",
+    walletAddress: WALLET,
+    tokenAddress: TOKEN,
+    amountBaseUnits: "250000000",
+    idempotencyKey: "smart-request-approve:request-1:wallet-1"
+  });
+
+  assert.match(firstClient.calls[0].idempotencyKey, UUID_PATTERN);
+  assert.equal(firstClient.calls[0].idempotencyKey, secondClient.calls[0].idempotencyKey);
 });
 
 test("executeSmartRequestPayment approves first, pays, waits, and verifies settled state", async () => {
@@ -275,10 +311,10 @@ test("executeSmartRequestPayment approves first, pays, waits, and verifies settl
   assert.equal(result.data.request.status, "settled");
   assert.equal(circleWalletsClient.calls.length, 2);
   assert.equal(circleWalletsClient.calls[0].abiFunctionSignature, ABI_SIGNATURES.approve);
-  assert.equal(circleWalletsClient.calls[0].idempotencyKey, "approval-key");
+  assert.match(circleWalletsClient.calls[0].idempotencyKey, UUID_PATTERN);
   assert.equal(circleWalletsClient.calls[1].abiFunctionSignature, ABI_SIGNATURES.fundRequest);
   assert.deepEqual(circleWalletsClient.calls[1].abiParameters, ["7"]);
-  assert.equal(circleWalletsClient.calls[1].idempotencyKey, "payment-key");
+  assert.match(circleWalletsClient.calls[1].idempotencyKey, UUID_PATTERN);
 });
 
 test("executeSmartRequestPayment does not report success when contract state is not verified", async () => {
@@ -325,7 +361,7 @@ test("createOnchainSmartRequest uses exact generated createRequest signature", a
   });
 
   assert.equal(result.ok, true);
-  assert.equal(circleWalletsClient.calls[0].idempotencyKey, "create-key");
+  assert.match(circleWalletsClient.calls[0].idempotencyKey, UUID_PATTERN);
   assert.equal(circleWalletsClient.calls[0].abiFunctionSignature, ABI_SIGNATURES.createRequest);
   assert.deepEqual(circleWalletsClient.calls[0].abiParameters, [
     BYTES32,

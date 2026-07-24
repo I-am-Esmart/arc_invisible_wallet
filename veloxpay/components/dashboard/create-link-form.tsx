@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import { fetchFeatureCapabilities } from "@/lib/api/features";
 import { createPaymentLink } from "@/lib/api/payment-links";
 import { createSmartRequest } from "@/lib/api/smart-requests";
 import {
@@ -81,6 +82,8 @@ export function CreateLinkForm({
   const [customerName, setCustomerName] = useState("");
   const [recurrence, setRecurrence] = useState("one-time");
   const [paymentMode, setPaymentMode] = useState<SmartRequestMode>("standard");
+  const [smartRequestsAvailable, setSmartRequestsAvailable] = useState(false);
+  const [smartRequestsMessage, setSmartRequestsMessage] = useState("");
   const [deliverableDescription, setDeliverableDescription] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [refundEligibilityDate, setRefundEligibilityDate] = useState("");
@@ -135,6 +138,39 @@ export function CreateLinkForm({
       }
     }
   }, [compact, router, walletUser]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    fetchFeatureCapabilities()
+      .then((features) => {
+        if (cancelled) {
+          return;
+        }
+
+        setSmartRequestsAvailable(Boolean(features.payments.smartRequests));
+        setSmartRequestsMessage(features.payments.smartRequestsMessage || "");
+      })
+      .catch(() => {
+        if (cancelled) {
+          return;
+        }
+
+        setSmartRequestsAvailable(false);
+        setSmartRequestsMessage("Smart Requests are unavailable until the backend confirms contract configuration.");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!smartRequestsAvailable && paymentMode !== "standard") {
+      setPaymentMode("standard");
+      setIsReviewing(false);
+    }
+  }, [paymentMode, smartRequestsAvailable]);
 
   useEffect(() => {
     if (paymentMode === "standard") {
@@ -213,6 +249,14 @@ export function CreateLinkForm({
   }
 
   function handleModeChange(mode: SmartRequestMode) {
+    if (mode !== "standard" && !smartRequestsAvailable) {
+      setState({
+        status: "error",
+        message: smartRequestsMessage || "Smart Requests are unavailable until the VeloxPayRequests contract is configured.",
+      });
+      return;
+    }
+
     setPaymentMode(mode);
     setIsReviewing(false);
     setState({ status: "idle" });
@@ -358,10 +402,13 @@ export function CreateLinkForm({
               <button
                 key={option.id}
                 type="button"
+                disabled={option.id !== "standard" && !smartRequestsAvailable}
                 onClick={() => handleModeChange(option.id as SmartRequestMode)}
                 className={`rounded-2xl border px-4 py-3 text-left transition ${
                   paymentMode === option.id
                     ? "border-brand-500 bg-brand-50 text-brand-900 ring-2 ring-brand-100"
+                    : option.id !== "standard" && !smartRequestsAvailable
+                      ? "cursor-not-allowed border-slate-200 bg-slate-50 text-slate-400"
                     : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
                 }`}
               >
@@ -370,6 +417,11 @@ export function CreateLinkForm({
               </button>
             ))}
           </div>
+          {!smartRequestsAvailable && smartRequestsMessage ? (
+            <p className="mt-3 rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              {smartRequestsMessage}
+            </p>
+          ) : null}
         </section>
 
         {walletUser?.email ? (

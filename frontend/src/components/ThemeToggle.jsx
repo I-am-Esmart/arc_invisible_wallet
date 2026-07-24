@@ -3,14 +3,14 @@ import { useEffect, useState } from "react"
 const STORAGE_KEY = "arc-wallet-theme"
 
 export default function ThemeToggle() {
-  const [theme, setTheme] = useState("light")
+  const [theme, setTheme] = useState(() => {
+    const savedTheme = localStorage.getItem(STORAGE_KEY)
+    return savedTheme === "dark" ? "dark" : "light"
+  })
 
   useEffect(() => {
-    const savedTheme = localStorage.getItem(STORAGE_KEY)
-    const nextTheme = savedTheme === "dark" ? "dark" : "light"
-    setTheme(nextTheme)
-    document.documentElement.classList.toggle("dark", nextTheme === "dark")
-  }, [])
+    document.documentElement.classList.toggle("dark", theme === "dark")
+  }, [theme])
 
   function toggleTheme() {
     const nextTheme = theme === "dark" ? "light" : "dark"

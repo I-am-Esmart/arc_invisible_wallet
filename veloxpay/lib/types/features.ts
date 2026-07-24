@@ -15,6 +15,8 @@ export type FeatureCapabilities = {
   payments: {
     links: boolean;
     receipts: boolean;
+    smartRequests?: boolean;
+    smartRequestsMessage?: string;
     recurringRequests: boolean;
     batchTransfers: boolean;
     nativeBatchTransfers: boolean;
