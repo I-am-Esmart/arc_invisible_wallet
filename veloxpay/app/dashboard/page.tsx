@@ -32,8 +32,16 @@ export default function DashboardPage() {
           Welcome back, {walletUser.displayName || walletUser.username || "there"}
         </h1>
         <p className="mt-5 max-w-3xl text-lg leading-8 text-slate-600">
-          VeloxPay helps you hold stablecoins, send money, and create shareable payment requests. Think of the payment-request feature like a simple invoice link you can send to a client, customer, or friend.
+          Create Smart Requests that get paid normally, split funds across a team, or hold payment in the Arc contract until delivery is approved.
         </p>
+        <div className="mt-8 flex flex-wrap gap-3">
+          <Button asChild>
+            <Link href="/links">Create Smart Request</Link>
+          </Button>
+          <Button asChild variant="secondary">
+            <Link href="/payments">Manage protected payments</Link>
+          </Button>
+        </div>
       </section>
 
       {(errors.balances || errors.links || errors.payments) ? (
@@ -72,39 +80,39 @@ export default function DashboardPage() {
 
       <section className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
         <Card>
-          <h2 className="text-lg font-semibold text-slate-900">How payment requests work</h2>
+          <h2 className="text-lg font-semibold text-slate-900">Smart Request modes</h2>
           <div className="mt-5 grid gap-4 md:grid-cols-3">
             <div className="rounded-2xl bg-slate-50 p-4">
-              <div className="text-sm font-semibold text-slate-900">1. Create a request</div>
+              <div className="text-sm font-semibold text-slate-900">Standard</div>
               <p className="mt-2 text-sm leading-6 text-slate-600">
-                Enter an amount and short description to turn it into a shareable payment request.
+                One payer, one recipient, one clean link for simple USDC or EURC checkout.
               </p>
             </div>
             <div className="rounded-2xl bg-slate-50 p-4">
-              <div className="text-sm font-semibold text-slate-900">2. Share the link</div>
+              <div className="text-sm font-semibold text-slate-900">Split</div>
               <p className="mt-2 text-sm leading-6 text-slate-600">
-                Send it in a DM, post, invoice, email, or anywhere you normally ask to be paid.
+                Add up to 10 recipients and let the contract distribute exact percentages.
               </p>
             </div>
             <div className="rounded-2xl bg-slate-50 p-4">
-              <div className="text-sm font-semibold text-slate-900">3. Get paid</div>
+              <div className="text-sm font-semibold text-slate-900">Protected</div>
               <p className="mt-2 text-sm leading-6 text-slate-600">
-                The payer opens a clean page, confirms the payment, and it shows up in your records.
+                Funds stay in escrow until the deliverable is submitted and the payer releases payment.
               </p>
             </div>
           </div>
         </Card>
 
         <Card>
-          <h2 className="text-lg font-semibold text-slate-900">Good use cases</h2>
+          <h2 className="text-lg font-semibold text-slate-900">Protected workflow</h2>
           <div className="mt-4 space-y-3 text-sm leading-6 text-slate-600">
-            <p>Freelance work like design, writing, or consulting.</p>
-            <p>Event tickets, digital products, or creator support.</p>
-            <p>Simple payment requests for friends, teams, and communities.</p>
+            <p>1. Payer funds the request into the Arc smart contract.</p>
+            <p>2. Payee submits a deliverable URL and hash.</p>
+            <p>3. Payer approves release, or eligible refunds follow contract rules.</p>
           </div>
           <div className="mt-5">
             <Button asChild>
-              <Link href="/links">Create a payment request</Link>
+              <Link href="/links">Create protected request</Link>
             </Button>
           </div>
         </Card>
@@ -112,37 +120,37 @@ export default function DashboardPage() {
 
       <section className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
         <Card>
+          <h2 className="text-lg font-semibold text-slate-900">Create requests</h2>
+          <p className="mt-2 text-sm leading-6 text-slate-600">
+            Choose standard, split, or protected mode, then review recipients, percentages, and contract behavior.
+          </p>
+          <div className="mt-5">
+            <Button asChild>
+              <Link href="/links">Open request builder</Link>
+            </Button>
+          </div>
+        </Card>
+
+        <Card>
+          <h2 className="text-lg font-semibold text-slate-900">Protected payments</h2>
+          <p className="mt-2 text-sm leading-6 text-slate-600">
+            Submit deliverables as a payee, approve releases as a payer, and follow the contract timeline.
+          </p>
+          <div className="mt-5">
+            <Button asChild>
+              <Link href="/payments">Review protected payments</Link>
+            </Button>
+          </div>
+        </Card>
+
+        <Card>
           <h2 className="text-lg font-semibold text-slate-900">Wallet</h2>
           <p className="mt-2 text-sm leading-6 text-slate-600">
-            Check balances, copy your address, fund with the faucet, and review wallet activity.
+            Check USDC and EURC balances, copy your address, fund testnet wallets, and send funds directly.
           </p>
           <div className="mt-5">
             <Button asChild>
               <Link href="/wallet">Open wallet</Link>
-            </Button>
-          </div>
-        </Card>
-
-        <Card>
-          <h2 className="text-lg font-semibold text-slate-900">Send funds</h2>
-          <p className="mt-2 text-sm leading-6 text-slate-600">
-            Send USDC or EURC directly from the wallet that powers your payment links.
-          </p>
-          <div className="mt-5">
-            <Button asChild>
-              <Link href="/wallet/send">Go to send</Link>
-            </Button>
-          </div>
-        </Card>
-
-        <Card>
-          <h2 className="text-lg font-semibold text-slate-900">Get paid by link</h2>
-          <p className="mt-2 text-sm leading-6 text-slate-600">
-            Create invoice-style payment requests you can share in seconds and track from one place.
-          </p>
-          <div className="mt-5">
-            <Button asChild>
-              <Link href="/links">Open get paid</Link>
             </Button>
           </div>
         </Card>

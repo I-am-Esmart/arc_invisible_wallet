@@ -31,33 +31,33 @@ export default function HomePage() {
               </p>
             </div>
             <h1 className="mt-5 max-w-3xl text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl">
-              VeloxPay Smart Requests
+              Payment links that know how to handle the money.
             </h1>
             <p className="mt-5 max-w-2xl text-lg leading-8 text-slate-600">
-              Payment links that can settle normally, split USDC or EURC across a team,
-              or hold funds in an Arc smart contract until delivery is approved.
+              Create one link to get paid normally, split stablecoins across a team,
+              or protect a delivery payment until the payer approves the work.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <Button asChild>
-                <Link href="/dashboard">Create Smart Request</Link>
+                <Link href="/dashboard">Create payment request</Link>
               </Button>
               <Button asChild variant="secondary">
-                <Link href="/login">Create or restore wallet</Link>
+                <Link href="/login">Open wallet</Link>
               </Button>
             </div>
 
             <div className="mt-10 grid gap-4 text-sm text-slate-600 sm:grid-cols-3">
               <div>
-                <div className="font-semibold text-slate-900">Split payments</div>
-                <div>Allocate up to 10 recipients with exact basis points.</div>
+                <div className="font-semibold text-slate-900">Standard</div>
+                <div>Send a simple request and receive funds in your wallet.</div>
               </div>
               <div>
-                <div className="font-semibold text-slate-900">Protected delivery</div>
-                <div>Hold funds until the payer approves the submitted work.</div>
+                <div className="font-semibold text-slate-900">Split</div>
+                <div>Pay a team automatically by percentage from one checkout.</div>
               </div>
               <div>
-                <div className="font-semibold text-slate-900">Circle + Arc</div>
-                <div>Developer wallets, contract calls, and receipt verification.</div>
+                <div className="font-semibold text-slate-900">Protected</div>
+                <div>Hold funds in the contract until delivery is approved.</div>
               </div>
             </div>
           </div>
@@ -72,7 +72,7 @@ export default function HomePage() {
             <div className="rounded-2xl bg-white p-5 text-slate-950">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <div className="text-xs font-semibold uppercase text-slate-500">Agency website build</div>
+                  <div className="text-xs font-semibold uppercase text-slate-500">Protected split request</div>
                   <div className="mt-2 text-3xl font-semibold">1,000 USDC</div>
                 </div>
                 <div className="rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-700">Arc Testnet</div>
@@ -113,30 +113,30 @@ export default function HomePage() {
 
       <section className="grid gap-4 md:grid-cols-3">
         <Card className="bg-white/90">
-          <h2 className="text-lg font-semibold text-slate-900">1. Create a request</h2>
+          <h2 className="text-lg font-semibold text-slate-900">For invoices</h2>
           <p className="mt-2 text-sm leading-6 text-slate-600">
-            Choose standard, split, or protected mode, then add recipients and percentages.
+            Send a clean checkout link for USDC or EURC and track the payment from your workspace.
           </p>
         </Card>
         <Card className="bg-white/90">
-          <h2 className="text-lg font-semibold text-slate-900">2. Payer funds on Arc</h2>
+          <h2 className="text-lg font-semibold text-slate-900">For teams</h2>
           <p className="mt-2 text-sm leading-6 text-slate-600">
-            VeloxPay checks balance, allowance, Circle transactions, and contract state.
+            Split one payment across developers, designers, managers, and treasury wallets automatically.
           </p>
         </Card>
         <Card className="bg-white/90">
-          <h2 className="text-lg font-semibold text-slate-900">3. Verify the receipt</h2>
+          <h2 className="text-lg font-semibold text-slate-900">For delivery work</h2>
           <p className="mt-2 text-sm leading-6 text-slate-600">
-            Receipts compare canonical metadata with the onchain Smart Request record.
+            Protect both sides by holding payment until the deliverable is submitted and approved.
           </p>
         </Card>
       </section>
 
       <section className="flex flex-col gap-4 rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-xl font-semibold text-slate-900">Built for programmable stablecoin work</h2>
+          <h2 className="text-xl font-semibold text-slate-900">A wallet, checkout, and contract flow in one place</h2>
           <p className="mt-2 text-sm text-slate-600">
-            Circle Wallets handle user custody, Circle Contracts routes contract execution, and Arc settles the request.
+            Circle wallets handle the payer and payee accounts, while Arc settles each Smart Request onchain.
           </p>
         </div>
         <a
