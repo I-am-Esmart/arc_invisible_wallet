@@ -162,14 +162,14 @@ export function WalletWorkspace() {
   if (!walletUser) {
     return (
       <main className="space-y-8">
-        <section className="rounded-[2rem] bg-[radial-gradient(circle_at_top_left,_rgba(37,99,235,0.18),_transparent_28%),linear-gradient(135deg,_#ffffff,_#f8fbff_45%,_#eef5ff)] p-8 shadow-sm ring-1 ring-slate-200 sm:p-12">
-          <p className="inline-flex rounded-full bg-brand-50 px-4 py-1 text-sm font-medium uppercase tracking-[0.18em] text-brand-700">
+        <section className="rounded-2xl border border-line bg-white p-8 shadow-card sm:p-10">
+          <p className="vp-eyebrow">
             Wallet required
           </p>
-          <h1 className="mt-5 text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl">
+          <h1 className="mt-5 max-w-4xl text-4xl font-semibold tracking-tight text-ink-heading sm:text-5xl">
             Create or restore your VeloxPay wallet to unlock the full experience.
           </h1>
-          <p className="mt-5 max-w-2xl text-lg leading-8 text-slate-600">
+          <p className="mt-5 max-w-2xl text-lg leading-8 text-ink-body">
             One wallet gives you balances, send and receive, activity history, and payment links in one place.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
@@ -187,16 +187,16 @@ export function WalletWorkspace() {
 
   return (
     <main className="space-y-8">
-      <section className="rounded-[2rem] bg-[radial-gradient(circle_at_top_left,_rgba(37,99,235,0.18),_transparent_28%),linear-gradient(135deg,_#ffffff,_#f8fbff_45%,_#eef5ff)] p-8 shadow-sm ring-1 ring-slate-200 sm:p-12">
+      <section className="rounded-2xl border border-line bg-white p-8 shadow-card sm:p-10">
         <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <p className="inline-flex rounded-full bg-brand-50 px-4 py-1 text-sm font-medium uppercase tracking-[0.18em] text-brand-700">
+            <p className="vp-eyebrow">
               VeloxPay workspace
             </p>
-            <h1 className="mt-5 text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl">
+            <h1 className="mt-5 max-w-4xl text-4xl font-semibold tracking-tight text-ink-heading sm:text-5xl">
               Welcome back, {walletUser.displayName || walletUser.username || "there"}
             </h1>
-            <p className="mt-5 max-w-3xl text-lg leading-8 text-slate-600">
+            <p className="mt-5 max-w-3xl text-lg leading-8 text-ink-body">
               Your wallet, payment links, and incoming payments now live in one dashboard. Fund your wallet, share a link, and track everything without hopping between apps.
             </p>
           </div>
@@ -235,13 +235,13 @@ export function WalletWorkspace() {
               <div className="mt-1 text-sm text-slate-500">{entry.label}</div>
             </Card>
           ))}
-          <Card className="bg-slate-950 text-white">
-            <div className="text-sm text-white/60">Wallet address</div>
-            <div className="mt-2 break-all font-mono text-sm">{walletUser.address}</div>
+          <Card className="border-brand-100 bg-brand-50">
+            <div className="text-sm text-brand-700">Wallet address</div>
+            <div className="mt-2 break-all font-mono text-sm text-ink-heading">{walletUser.address}</div>
             <button
               type="button"
               onClick={handleCopyAddress}
-              className="mt-4 inline-flex items-center rounded-2xl bg-white/10 px-3 py-2 text-sm font-medium text-white transition hover:bg-white/15"
+              className="mt-4 inline-flex items-center rounded-xl bg-white px-3 py-2 text-sm font-semibold text-brand-700 shadow-sm ring-1 ring-brand-100 transition hover:bg-brand-50"
             >
               {copiedAddress ? "Copied" : `Copy ${shortAddress(walletUser.address)}`}
             </button>
@@ -262,7 +262,7 @@ export function WalletWorkspace() {
               <select
                 value={token}
                 onChange={(event) => setToken(event.target.value as "USDC" | "EURC")}
-                className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+                className="vp-control"
               >
                 {TOKEN_OPTIONS.map((entry) => (
                   <option key={entry.value} value={entry.value}>
@@ -278,7 +278,7 @@ export function WalletWorkspace() {
                 value={recipientAddress}
                 onChange={(event) => setRecipientAddress(event.target.value)}
                 placeholder="0x..."
-                className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+                className="vp-control"
                 required
               />
             </label>
@@ -292,7 +292,7 @@ export function WalletWorkspace() {
                 type="number"
                 min="0"
                 step="0.000001"
-                className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+                className="vp-control"
                 required
               />
             </label>
@@ -304,7 +304,7 @@ export function WalletWorkspace() {
                 onChange={(event) => setSendMemo(event.target.value)}
                 placeholder="Invoice, payout reason, or note"
                 maxLength={180}
-                className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+                className="vp-control"
               />
             </label>
 
@@ -364,10 +364,10 @@ export function WalletWorkspace() {
               <div className="mt-2 text-3xl font-semibold text-slate-900">{totalPayments}</div>
             </div>
           </div>
-          <div className="mt-6 rounded-2xl bg-slate-950 p-5 text-white">
-            <div className="text-sm text-white/60">Connected wallet</div>
-            <div className="mt-2 break-all font-mono text-sm">{walletUser.email}</div>
-            <div className="mt-4 text-sm text-white/70">
+          <div className="mt-6 rounded-xl border border-line bg-slate-50 p-5">
+            <div className="text-sm text-ink-muted">Connected wallet</div>
+            <div className="mt-2 break-all font-mono text-sm text-ink-heading">{walletUser.email}</div>
+            <div className="mt-4 text-sm text-ink-body">
               This single wallet identity now powers your send, receive, payment-link, and payment history flows.
             </div>
           </div>

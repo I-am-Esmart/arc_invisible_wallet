@@ -131,19 +131,19 @@ export function LoginPageClient() {
 
   return (
     <main className="mx-auto max-w-md">
-      <Card className="rounded-[2rem] p-8 sm:p-10">
+      <Card className="p-8 sm:p-10">
         <div className="flex items-center gap-4">
           <VeloxPayLogo className="h-14 w-14" />
           <div>
-            <p className="inline-flex rounded-full bg-brand-50 px-4 py-1 text-sm font-medium uppercase tracking-[0.18em] text-brand-700">
+            <p className="vp-eyebrow">
               VeloxPay wallet
             </p>
           </div>
         </div>
-        <h1 className="mt-5 text-4xl font-semibold tracking-tight text-slate-950">
+        <h1 className="mt-5 text-4xl font-semibold tracking-tight text-ink-heading">
           Create or restore your wallet
         </h1>
-        <p className="mt-4 text-base leading-7 text-slate-600">
+        <p className="mt-4 text-base leading-7 text-ink-body">
           One email unlocks your wallet, balances, send and receive, activity history, and payment requests.
         </p>
 
@@ -155,7 +155,7 @@ export function LoginPageClient() {
 
         <div className="mt-6 space-y-4">
           <label className="block space-y-2">
-            <span className="text-sm font-medium text-slate-700">Your name</span>
+            <span className="text-sm font-semibold text-ink-heading">Your name</span>
             <input
               type="text"
               placeholder="Smart"
@@ -165,12 +165,12 @@ export function LoginPageClient() {
                 setChallengeId("");
                 setVerificationCode("");
               }}
-              className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+              className="vp-control"
             />
           </label>
 
           <label className="block space-y-2">
-            <span className="text-sm font-medium text-slate-700">Your email</span>
+            <span className="text-sm font-semibold text-ink-heading">Your email</span>
             <input
               type="email"
               placeholder="you@example.com"
@@ -180,13 +180,13 @@ export function LoginPageClient() {
                 setChallengeId("");
                 setVerificationCode("");
               }}
-              className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+              className="vp-control"
             />
           </label>
 
           {challengeId ? (
             <label className="block space-y-2">
-              <span className="text-sm font-medium text-slate-700">Verification code</span>
+              <span className="text-sm font-semibold text-ink-heading">Verification code</span>
               <input
                 type="text"
                 inputMode="numeric"
@@ -194,7 +194,7 @@ export function LoginPageClient() {
                 placeholder="123456"
                 value={verificationCode}
                 onChange={(event) => setVerificationCode(event.target.value)}
-                className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+                className="vp-control"
               />
             </label>
           ) : null}
@@ -216,13 +216,13 @@ export function LoginPageClient() {
           <button
             onClick={handleResendCode}
             disabled={loading}
-            className="mt-3 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-medium text-slate-600 transition hover:bg-slate-50"
+            className="mt-3 w-full rounded-xl border border-line px-4 py-3 text-sm font-semibold text-ink-body transition hover:bg-slate-50"
           >
             Send a new code
           </button>
         ) : null}
 
-        <div className="mt-6 text-center text-sm text-slate-500">
+        <div className="mt-6 text-center text-sm text-ink-muted">
           Use the same email again on any device and VeloxPay will bring back the same wallet after email verification.
         </div>
 

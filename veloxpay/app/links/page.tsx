@@ -25,15 +25,15 @@ export default function LinksPage() {
 
   return (
     <main className="space-y-6">
-      <section className="flex flex-col gap-4 rounded-3xl bg-white p-8 shadow-sm ring-1 ring-slate-200 lg:flex-row lg:items-end lg:justify-between">
+      <section className="flex flex-col gap-4 rounded-2xl border border-line bg-white p-8 shadow-card lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <p className="text-sm font-medium uppercase tracking-[0.2em] text-brand-600">Get paid</p>
-          <h1 className="mt-2 text-3xl font-semibold text-slate-900">Create a payment request people instantly understand</h1>
-          <p className="mt-3 max-w-2xl text-sm text-slate-600">
-            Turn any amount into a shareable invoice-style payment request. Send it to a client, customer, donor, or friend and let them pay from one clean page.
+          <p className="vp-eyebrow">Get paid</p>
+          <h1 className="mt-3 text-3xl font-semibold text-ink-heading">Create a payment request people instantly understand</h1>
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-ink-body">
+            Send a standard checkout, split a payment across collaborators, or protect delivery work in the Arc contract.
           </p>
         </div>
-        <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
+        <div className="rounded-xl border border-line bg-slate-50 px-4 py-3 text-sm text-ink-body">
           {activeLinks} active request{activeLinks === 1 ? "" : "s"}
         </div>
       </section>
@@ -55,20 +55,21 @@ export default function LinksPage() {
           }}
         />
         <Card>
-          <h2 className="text-lg font-semibold text-slate-900">How to use this well</h2>
-          <div className="mt-4 space-y-3 text-sm leading-6 text-slate-600">
-            <p>Use a clear description like &quot;Logo design deposit&quot;, &quot;Consulting session&quot;, or &quot;Community support&quot;.</p>
-            <p>Recurring weekly and monthly requests are great for retainers, subscriptions, and repeat invoices.</p>
-            <p>After you create the request, copy the link, show the QR code, or share the request anywhere you normally ask to be paid.</p>
-            <p>Once the money lands, it will appear in your incoming payments view, wallet records, and a shareable receipt page.</p>
+          <h2 className="text-lg font-semibold">Request types</h2>
+          <div className="mt-5 space-y-3">
+            {[
+              ["Standard", "One payer, one recipient, familiar checkout."],
+              ["Split", "Multiple recipients, exact allocation percentages."],
+              ["Protected", "Funds held until delivery is approved."],
+            ].map(([title, copy]) => (
+              <div key={title} className="rounded-xl border border-line bg-slate-50 p-4">
+                <div className="text-sm font-semibold text-ink-heading">{title}</div>
+                <p className="mt-1 text-sm leading-6 text-ink-body">{copy}</p>
+              </div>
+            ))}
           </div>
-          <div className="mt-5 rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">
-            <div className="font-semibold text-slate-900">Simple examples</div>
-            <div className="mt-2 space-y-2">
-              <p>Client invoice</p>
-              <p>Donation request</p>
-              <p>Weekly retainer or monthly membership</p>
-            </div>
+          <div className="mt-5 rounded-xl border border-brand-100 bg-brand-50 p-4 text-sm leading-6 text-brand-700">
+            Payment status, receipts, QR codes, and explorer links stay attached to the request after it is created.
           </div>
         </Card>
       </section>

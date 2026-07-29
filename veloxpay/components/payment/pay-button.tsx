@@ -57,7 +57,7 @@ export function PayButton({
             placeholder="you@example.com"
             value={payerEmail}
             onChange={(event) => setPayerEmail(event.target.value)}
-            className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+            className="vp-control"
             required
           />
         </label>
@@ -73,7 +73,7 @@ export function PayButton({
               placeholder="123456"
               value={verificationCode}
               onChange={(event) => setVerificationCode(event.target.value)}
-              className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+              className="vp-control"
             />
           </label>
         ) : (

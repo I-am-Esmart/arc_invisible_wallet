@@ -47,11 +47,11 @@ export default function WalletPage() {
 
   return (
     <main className="space-y-8">
-      <section className="flex flex-col gap-4 rounded-3xl bg-white p-8 shadow-sm ring-1 ring-slate-200 lg:flex-row lg:items-end lg:justify-between">
+      <section className="flex flex-col gap-4 rounded-2xl border border-line bg-white p-8 shadow-card lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <p className="text-sm font-medium uppercase tracking-[0.2em] text-brand-600">Wallet</p>
-          <h1 className="mt-2 text-3xl font-semibold text-slate-900">Your wallet in one place</h1>
-          <p className="mt-3 max-w-2xl text-sm text-slate-600">
+          <p className="vp-eyebrow">Wallet</p>
+          <h1 className="mt-3 text-3xl font-semibold text-ink-heading">Your wallet in one place</h1>
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-ink-body">
             Check balances, copy your address, fund with faucet tokens, and keep an eye on recent activity.
           </p>
         </div>
@@ -98,12 +98,12 @@ export default function WalletPage() {
             {walletUser.gasMode === "sponsored" ? "Gas sponsored with Circle Gas Station." : "Arc fees are paid in USDC."}
           </p>
         </Card>
-        <Card className="bg-slate-950 text-white">
-          <div className="text-sm text-white/60">Wallet address</div>
-          <div className="mt-2 break-all font-mono text-sm">{walletUser.address}</div>
+        <Card className="border-brand-100 bg-brand-50">
+          <div className="text-sm text-brand-700">Wallet address</div>
+          <div className="mt-2 break-all font-mono text-sm text-ink-heading">{walletUser.address}</div>
           <button
             onClick={handleCopyAddress}
-            className="mt-4 inline-flex items-center rounded-2xl bg-white/10 px-3 py-2 text-sm font-medium text-white transition hover:bg-white/15"
+            className="mt-4 inline-flex items-center rounded-xl bg-white px-3 py-2 text-sm font-semibold text-brand-700 shadow-sm ring-1 ring-brand-100 transition hover:bg-brand-50"
           >
             {copiedAddress ? "Copied" : `Copy ${shortAddress(walletUser.address)}`}
           </button>

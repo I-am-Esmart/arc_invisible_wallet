@@ -121,11 +121,11 @@ export default function FeaturesPage() {
 
   return (
     <main className="space-y-6">
-      <section className="flex flex-col gap-4 rounded-3xl bg-white p-8 shadow-sm ring-1 ring-slate-200 lg:flex-row lg:items-end lg:justify-between">
+      <section className="flex flex-col gap-4 rounded-2xl border border-line bg-white p-8 shadow-card lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <p className="text-sm font-medium uppercase tracking-[0.2em] text-brand-600">Advanced tools</p>
-          <h1 className="mt-2 text-3xl font-semibold text-slate-900">Move and manage funds on Arc</h1>
-          <p className="mt-3 max-w-2xl text-sm text-slate-600">
+          <p className="vp-eyebrow">Advanced tools</p>
+          <h1 className="mt-3 text-3xl font-semibold text-ink-heading">Move and manage funds on Arc</h1>
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-ink-body">
             Bridge funding, stablecoin swaps, and batch payouts are being prepared for VeloxPay power users.
           </p>
         </div>
@@ -138,21 +138,21 @@ export default function FeaturesPage() {
 
       <section className="grid gap-6 xl:grid-cols-2">
         <Card>
-          <h2 className="text-lg font-semibold text-slate-900">Bridge USDC to Arc</h2>
-          <p className="mt-2 text-sm text-slate-600">
+          <h2 className="text-lg font-semibold">Bridge USDC to Arc</h2>
+          <p className="mt-2 text-sm text-ink-body">
             Estimate a USDC funding route into Arc before moving funds.
           </p>
           <form onSubmit={handleBridgeQuote} className="mt-4 space-y-4">
             <input
               value={bridgeForm.fromChain}
               onChange={(event) => setBridgeForm((current) => ({ ...current, fromChain: event.target.value }))}
-              className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm"
+              className="vp-control"
               aria-label="Source chain"
             />
             <input
               value={bridgeForm.amount}
               onChange={(event) => setBridgeForm((current) => ({ ...current, amount: event.target.value }))}
-              className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm"
+              className="vp-control"
               aria-label="Bridge amount"
             />
             <Button type="submit">Check bridge route</Button>
@@ -163,15 +163,15 @@ export default function FeaturesPage() {
         </Card>
 
         <Card>
-          <h2 className="text-lg font-semibold text-slate-900">Swap stablecoins</h2>
-          <p className="mt-2 text-sm text-slate-600">
+          <h2 className="text-lg font-semibold">Swap stablecoins</h2>
+          <p className="mt-2 text-sm text-ink-body">
             Prepare a stablecoin swap quote for Arc balances.
           </p>
           <form onSubmit={handleSwapQuote} className="mt-4 space-y-4">
             <select
               value={swapForm.fromToken}
               onChange={(event) => setSwapForm((current) => ({ ...current, fromToken: event.target.value }))}
-              className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm"
+              className="vp-control"
               aria-label="Source token"
             >
               <option value="EURC">EURC</option>
@@ -180,7 +180,7 @@ export default function FeaturesPage() {
             <select
               value={swapForm.toToken}
               onChange={(event) => setSwapForm((current) => ({ ...current, toToken: event.target.value }))}
-              className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm"
+              className="vp-control"
               aria-label="Destination token"
             >
               <option value="USDC">USDC</option>
@@ -189,7 +189,7 @@ export default function FeaturesPage() {
             <input
               value={swapForm.amount}
               onChange={(event) => setSwapForm((current) => ({ ...current, amount: event.target.value }))}
-              className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm"
+              className="vp-control"
               aria-label="Swap amount"
             />
             <Button type="submit">Check swap route</Button>
@@ -201,8 +201,8 @@ export default function FeaturesPage() {
       </section>
 
       <Card>
-        <h2 className="text-lg font-semibold text-slate-900">Batch payouts</h2>
-        <p className="mt-2 text-sm text-slate-600">
+        <h2 className="text-lg font-semibold">Batch payouts</h2>
+        <p className="mt-2 text-sm text-ink-body">
           Enter one transfer per line as recipient, amount, token, memo. Local Arc wallets use one native Multicall3From batch transaction; Circle wallets use the compatible transfer route.
         </p>
         <form onSubmit={handleBatchSubmit} className="mt-4 space-y-4">
@@ -211,7 +211,7 @@ export default function FeaturesPage() {
             onChange={(event) => setBatchRows(event.target.value)}
             rows={5}
             placeholder="0xrecipient,1.00,USDC,Invoice payout"
-            className="w-full rounded-2xl border border-slate-300 px-4 py-3 font-mono text-sm"
+            className="vp-control font-mono"
             aria-label="Batch transfers"
           />
           <Button type="submit" disabled={batchTransfers.length === 0}>Run batch payout</Button>

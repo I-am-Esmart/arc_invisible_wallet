@@ -7,7 +7,7 @@ type VeloxPayLogoProps = {
 export function VeloxPayLogo({
   className = "h-10 w-10",
   showWordmark = false,
-  textClassName = "text-xl font-semibold tracking-tight text-slate-950 dark:text-slate-50",
+  textClassName = "text-xl font-semibold tracking-tight text-ink-heading",
 }: VeloxPayLogoProps) {
   return (
     <span className="inline-flex items-center gap-3">

@@ -469,7 +469,7 @@ export function SmartRequestCheckout({
           }}
           placeholder="you@example.com"
           disabled={isBusy || completed}
-          className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+          className="vp-control"
         />
       </label>
 
@@ -484,7 +484,7 @@ export function SmartRequestCheckout({
             onChange={(event) => setVerificationCode(event.target.value)}
             placeholder="123456"
             disabled={isBusy || completed}
-            className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+            className="vp-control"
           />
         </label>
       ) : (

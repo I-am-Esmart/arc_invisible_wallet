@@ -71,15 +71,15 @@ export default function PaymentsPage() {
 
   return (
     <main className="space-y-6">
-      <section className="flex flex-col gap-4 rounded-3xl bg-white p-8 shadow-sm ring-1 ring-slate-200 lg:flex-row lg:items-end lg:justify-between">
+      <section className="flex flex-col gap-4 rounded-2xl border border-line bg-white p-8 shadow-card lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <p className="text-sm font-medium uppercase tracking-[0.2em] text-brand-600">Incoming payments</p>
-          <h1 className="mt-2 text-3xl font-semibold text-slate-900">Track your payments</h1>
-          <p className="mt-3 max-w-2xl text-sm text-slate-600">
+          <p className="vp-eyebrow">Payments</p>
+          <h1 className="mt-3 text-3xl font-semibold text-ink-heading">Track money movement and receipts</h1>
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-ink-body">
             Review money received and payments you made, including receipt links for completed payment requests.
           </p>
         </div>
-        <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
+        <div className="rounded-xl border border-line bg-slate-50 px-4 py-3 text-sm text-ink-body">
           {totals.completedPayments + outgoingPayments.length} payment{totals.completedPayments + outgoingPayments.length === 1 ? "" : "s"} tracked
         </div>
       </section>
@@ -92,7 +92,7 @@ export default function PaymentsPage() {
       ) : null}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="inline-flex rounded-2xl bg-slate-100 p-1">
+        <div className="inline-flex rounded-xl border border-line bg-slate-100 p-1">
           <button
             type="button"
             onClick={() => setActiveTab("incoming")}
@@ -114,7 +114,7 @@ export default function PaymentsPage() {
         </div>
         <button
           onClick={refreshAllPayments}
-          className="inline-flex items-center rounded-2xl bg-slate-100 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-200"
+          className="inline-flex items-center rounded-xl border border-line bg-white px-4 py-2.5 text-sm font-semibold text-ink-body shadow-sm transition hover:bg-slate-50"
         >
           {loadingOutgoing ? "Refreshing..." : "Refresh payments"}
         </button>

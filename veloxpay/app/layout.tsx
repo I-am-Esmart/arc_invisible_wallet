@@ -1,7 +1,20 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import { Inter, Manrope } from "next/font/google";
 import { AppHeader } from "@/components/app-header";
 import "./globals.css";
+
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
+  display: "swap",
+});
+
+const manrope = Manrope({
+  subsets: ["latin"],
+  variable: "--font-manrope",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "VeloxPay",
@@ -15,9 +28,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body>
+      <body className={`${inter.variable} ${manrope.variable} font-sans`}>
         <div className="min-h-screen">
-          <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
+          <div className="mx-auto max-w-7xl px-4 py-5 sm:px-6 lg:px-8">
             <AppHeader />
             {children}
           </div>

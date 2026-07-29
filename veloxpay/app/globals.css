@@ -4,78 +4,58 @@
 
 :root {
   color-scheme: light;
-}
-
-html.dark {
-  color-scheme: dark;
+  --vp-blue: #2563EB;
+  --vp-blue-hover: #1D4ED8;
+  --vp-blue-light: #EFF6FF;
+  --vp-bg: #FCFCFD;
+  --vp-card: #FFFFFF;
+  --vp-section: #F8FAFC;
+  --vp-heading: #0F172A;
+  --vp-body: #475569;
+  --vp-muted: #64748B;
+  --vp-border: #E2E8F0;
 }
 
 body {
-  @apply bg-slate-50 text-slate-900 antialiased;
+  @apply bg-surface text-ink-body antialiased;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
 }
 
-html.theme-ready body,
-html.theme-ready body *,
-html.theme-ready body *::before,
-html.theme-ready body *::after {
-  transition:
-    background-color 260ms ease,
-    border-color 260ms ease,
-    color 260ms ease,
-    box-shadow 260ms ease,
-    fill 260ms ease,
-    stroke 260ms ease;
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  @apply font-display text-ink-heading;
 }
 
 a {
   @apply text-brand-600;
 }
 
-html.dark body {
-  background: #020617;
-  color: #e2e8f0;
+::selection {
+  @apply bg-brand-100 text-brand-700;
 }
 
-html.dark .bg-white,
-html.dark .bg-white\/85,
-html.dark .bg-white\/90 {
-  background-color: #0f172a !important;
+@layer base {
+  input,
+  textarea,
+  select {
+    @apply border-line bg-white text-ink-heading placeholder:text-slate-400;
+  }
 }
 
-html.dark .bg-slate-50,
-html.dark .bg-slate-100,
-html.dark .bg-brand-50 {
-  background-color: #111827 !important;
-}
+@layer components {
+  .vp-section {
+    @apply rounded-2xl border border-line bg-white p-6 shadow-card sm:p-8;
+  }
 
-html.dark .text-slate-950,
-html.dark .text-slate-900,
-html.dark .text-slate-800 {
-  color: #f8fafc !important;
-}
+  .vp-eyebrow {
+    @apply inline-flex rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-brand-700;
+  }
 
-html.dark .text-slate-700,
-html.dark .text-slate-600,
-html.dark .text-slate-500,
-html.dark .text-slate-400 {
-  color: #cbd5e1 !important;
-}
-
-html.dark .border-slate-200,
-html.dark .border-slate-300,
-html.dark .ring-slate-200 {
-  border-color: #334155 !important;
-  --tw-ring-color: #334155 !important;
-}
-
-html.dark input,
-html.dark textarea,
-html.dark select {
-  background-color: #0f172a !important;
-  color: #f8fafc !important;
-  border-color: #334155 !important;
-}
-
-html.dark .bg-\[radial-gradient\(circle_at_top_left\,_rgba\(37\,99\,235\,0\.18\)\,_transparent_28\%\)\,linear-gradient\(135deg\,_\#ffffff\,_\#f8fbff_45\%\,_\#eef5ff\)\] {
-  background: linear-gradient(135deg, #0f172a, #111827 45%, #172554) !important;
+  .vp-control {
+    @apply w-full rounded-xl border border-line bg-white px-4 py-3 text-sm text-ink-heading shadow-sm outline-none transition focus:border-brand-500 focus:ring-4 focus:ring-brand-100 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400;
+  }
 }

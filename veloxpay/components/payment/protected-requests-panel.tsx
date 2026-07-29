@@ -251,7 +251,7 @@ function ProtectedRequestCard({
               onChange={(event) => setDeliverableUrl(event.target.value)}
               placeholder="https://example.com/delivery"
               disabled={!request.permissions.canSubmitDeliverable || actionDisabled}
-              className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+              className="vp-control"
             />
           </label>
           <label className="block space-y-2">
@@ -261,7 +261,7 @@ function ProtectedRequestCard({
               onChange={(event) => setNote(event.target.value)}
               rows={3}
               disabled={!request.permissions.canSubmitDeliverable || actionDisabled}
-              className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+              className="vp-control"
             />
           </label>
           <Button type="button" disabled={submitDisabled} onClick={() => runAction("submit")}>

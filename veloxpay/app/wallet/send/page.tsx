@@ -92,7 +92,7 @@ export default function WalletSendPage() {
             <select
               value={token}
               onChange={(event) => setToken(event.target.value as "USDC" | "EURC")}
-              className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+              className="vp-control"
             >
               {TOKEN_OPTIONS.map((entry) => (
                 <option key={entry.value} value={entry.value}>
@@ -108,7 +108,7 @@ export default function WalletSendPage() {
               value={to}
               onChange={(event) => setTo(event.target.value)}
               placeholder="0x..."
-              className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+              className="vp-control"
               required
             />
           </label>
@@ -122,7 +122,7 @@ export default function WalletSendPage() {
               type="number"
               min="0"
               step="0.000001"
-              className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+              className="vp-control"
               required
             />
           </label>
@@ -134,7 +134,7 @@ export default function WalletSendPage() {
               onChange={(event) => setMemo(event.target.value)}
               placeholder="Invoice, payout reason, or note"
               maxLength={180}
-              className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+              className="vp-control"
             />
           </label>
 
