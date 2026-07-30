@@ -248,7 +248,7 @@ export default function DashboardPage() {
 
   return (
     <main className="space-y-8">
-      <section className="rounded-2xl border border-line bg-white p-6 shadow-card sm:p-8">
+      <section className="rounded-2xl border border-line bg-white p-6 shadow-card sm:p-8 [animation:fadeIn_400ms_ease-out]">
         <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="vp-eyebrow">VeloxPay dashboard</p>
@@ -315,7 +315,7 @@ export default function DashboardPage() {
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[0.95fr_1.35fr]">
-        <div className="rounded-2xl border border-brand-100 bg-[linear-gradient(135deg,#2563EB,#1D4ED8)] p-6 text-white shadow-[0_24px_70px_rgba(37,99,235,0.24)]">
+        <div className="rounded-2xl border border-brand-100 bg-[linear-gradient(135deg,#2563EB,#1D4ED8)] p-6 text-white shadow-[0_24px_70px_rgba(37,99,235,0.24)] [animation:fadeIn_550ms_ease-out]">
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="text-sm font-semibold text-white/70">VeloxPay Wallet</p>
@@ -357,7 +357,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <Card>
+        <Card className="[animation:fadeIn_650ms_ease-out]">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <h2 className="text-lg font-semibold text-ink-heading">Payment Activity</h2>
@@ -452,7 +452,7 @@ export default function DashboardPage() {
         ].map((item) => {
           const Icon = item.icon;
           return (
-            <Card key={item.title}>
+            <Card key={item.title} className="[animation:fadeIn_700ms_ease-out]">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-50 text-brand-700">
                 <Icon className="h-5 w-5" aria-hidden="true" />
               </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { CheckCircle, ExternalLink, ReceiptText } from "lucide-react";
 import { BackendApiError } from "@/lib/api/backend";
 import { startPaymentForLink } from "@/lib/api/payments";
 import {
@@ -560,8 +561,21 @@ export function SmartRequestCheckout({
       {message ? <p className="rounded-2xl bg-emerald-50 p-4 text-sm text-emerald-800">{message}</p> : null}
       {error ? <p className="rounded-2xl bg-rose-50 p-4 text-sm text-rose-700">{error}</p> : null}
 
-      {(approval || paymentTransaction) ? (
-        <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 text-sm">
+      {(approval || paymentTransaction || receiptUrl) ? (
+        <div className="space-y-4 rounded-2xl border border-line bg-white p-5 text-sm shadow-card">
+          {completed ? (
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100">
+                <CheckCircle className="h-6 w-6" aria-hidden="true" />
+              </div>
+              <div>
+                <div className="font-semibold text-ink-heading">Payment completed</div>
+                <p className="mt-1 text-sm leading-6 text-ink-body">
+                  The contract state was verified and the receipt is ready.
+                </p>
+              </div>
+            </div>
+          ) : null}
           {approval ? (
             <TransactionLink label="Approval transaction" transaction={approval} />
           ) : null}
@@ -569,7 +583,8 @@ export function SmartRequestCheckout({
             <TransactionLink label="Payment transaction" transaction={paymentTransaction} />
           ) : null}
           {receiptUrl ? (
-            <a href={receiptUrl} target="_blank" rel="noreferrer" className="font-semibold text-brand-700 hover:underline">
+            <a href={receiptUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-white shadow-button transition hover:bg-brand-hover">
+              <ReceiptText className="h-4 w-4" aria-hidden="true" />
               View receipt
             </a>
           ) : null}
@@ -594,15 +609,16 @@ function TransactionLink({
   const href = txExplorerUrl(transaction);
 
   return (
-    <div className="space-y-1">
-      <div className="font-medium text-slate-800">{label}</div>
-      <div className="break-all font-mono text-xs text-slate-500">{transaction.txHash || transaction.id}</div>
+    <div className="rounded-xl border border-line bg-slate-50 p-4">
+      <div className="text-xs font-semibold uppercase tracking-[0.16em] text-ink-muted">{label}</div>
+      <div className="mt-2 break-all font-mono text-xs text-ink-heading">{transaction.txHash || transaction.id}</div>
       {hasConfirmedGasSponsorship(transaction) ? (
-        <div className="font-medium text-emerald-700">Network fee sponsored by VeloxPay</div>
+        <div className="mt-2 font-medium text-emerald-700">Network fee sponsored by VeloxPay</div>
       ) : null}
       {href ? (
-        <a href={href} target="_blank" rel="noreferrer" className="font-semibold text-brand-700 hover:underline">
+        <a href={href} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-2 font-semibold text-brand-700 hover:text-brand-hover">
           View on Arc Explorer
+          <ExternalLink className="h-4 w-4" aria-hidden="true" />
         </a>
       ) : null}
     </div>

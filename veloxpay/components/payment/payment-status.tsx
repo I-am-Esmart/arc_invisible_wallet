@@ -1,4 +1,5 @@
 import { Badge } from "@/components/ui/badge";
+import { CheckCircle, ExternalLink, ReceiptText, Wallet } from "lucide-react";
 
 type PaymentStatusProps = {
   status: "idle" | "code_sent" | "success" | "error";
@@ -35,27 +36,35 @@ export function PaymentStatus({
         : "Payment paused";
 
   return (
-    <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-      <div className="flex items-start gap-3">
-        <Badge variant={badgeVariant}>{badgeLabel}</Badge>
-        {message ? <p className="text-sm leading-6 text-slate-700">{message}</p> : null}
+    <div className="mt-6 rounded-2xl border border-line bg-white p-5 shadow-card">
+      <div className="flex items-start gap-4">
+        <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${
+          status === "success" ? "bg-emerald-50 text-emerald-700" : "bg-brand-50 text-brand-700"
+        }`}>
+          {status === "success" ? <CheckCircle className="h-6 w-6" aria-hidden="true" /> : <ReceiptText className="h-6 w-6" aria-hidden="true" />}
+        </div>
+        <div className="min-w-0">
+          <Badge variant={badgeVariant}>{badgeLabel}</Badge>
+          {message ? <p className="mt-2 text-sm leading-6 text-ink-body">{message}</p> : null}
+        </div>
       </div>
 
       {transactionHash ? (
-        <div className="mt-3 space-y-2 text-sm text-slate-600">
-          <div>
-            <span className="font-medium text-slate-800">Transaction hash:</span>{" "}
-            <span className="break-all font-mono">{transactionHash}</span>
+        <div className="mt-5 rounded-xl border border-line bg-slate-50 p-4 text-sm text-ink-body">
+          <div className="text-xs font-semibold uppercase tracking-[0.16em] text-ink-muted">
+            Transaction hash
           </div>
-          <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+          <div className="mt-2 break-all font-mono text-xs text-ink-heading">{transactionHash}</div>
+          <div className="mt-4 flex flex-wrap items-center gap-3">
             {explorerUrl ? (
               <a
                 href={explorerUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center font-medium text-brand-600 hover:underline"
+                className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2 text-sm font-semibold text-brand-700 ring-1 ring-brand-100 transition hover:bg-brand-50"
               >
-                View on Arc Explorer
+                <ExternalLink className="h-4 w-4" aria-hidden="true" />
+                View transaction
               </a>
             ) : <span />}
             {receiptUrl ? (
@@ -63,8 +72,9 @@ export function PaymentStatus({
                 href={receiptUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center rounded-2xl bg-white px-4 py-2 text-sm font-semibold text-brand-700 ring-1 ring-brand-100 transition hover:bg-brand-50"
+                className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2 text-sm font-semibold text-brand-700 ring-1 ring-brand-100 transition hover:bg-brand-50"
               >
+                <ReceiptText className="h-4 w-4" aria-hidden="true" />
                 View receipt
               </a>
             ) : null}
@@ -73,15 +83,16 @@ export function PaymentStatus({
       ) : null}
 
       {createWalletUrl ? (
-        <div className="mt-4 rounded-2xl bg-white p-4 ring-1 ring-slate-200">
-          <p className="text-sm leading-6 text-slate-700">
+        <div className="mt-4 rounded-2xl bg-slate-50 p-4 ring-1 ring-line">
+          <p className="text-sm leading-6 text-ink-body">
             New to VeloxPay? Create your wallet first, then come back here to finish the payment.
           </p>
           <div className="mt-3">
             <a
               href={createWalletUrl}
-              className="inline-flex items-center justify-center rounded-2xl bg-brand-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-brand-700"
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-white shadow-button transition hover:bg-brand-hover"
             >
+              <Wallet className="h-4 w-4" aria-hidden="true" />
               Create wallet on VeloxPay
             </a>
           </div>

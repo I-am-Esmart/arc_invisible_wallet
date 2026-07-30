@@ -1,11 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import { Download, ExternalLink, Link2 } from "lucide-react";
 
 export function ReceiptActions({
   receiptUrl,
+  explorerUrl,
 }: {
   receiptUrl: string;
+  explorerUrl?: string;
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -23,18 +26,31 @@ export function ReceiptActions({
     <div className="flex flex-wrap gap-3 print:hidden">
       <button
         type="button"
-        onClick={() => window.print()}
-        className="rounded-2xl bg-brand-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-brand-700"
+        onClick={handleCopy}
+        className="inline-flex items-center gap-2 rounded-xl border border-line bg-white px-4 py-2.5 text-sm font-semibold text-ink-heading shadow-sm transition hover:bg-slate-50"
       >
-        Print / Download
+        <Link2 className="h-4 w-4" aria-hidden="true" />
+        {copied ? "Copied" : "Copy receipt"}
       </button>
       <button
         type="button"
-        onClick={handleCopy}
-        className="rounded-2xl bg-slate-100 px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-200"
+        onClick={() => window.print()}
+        className="inline-flex items-center gap-2 rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-white shadow-button transition hover:bg-brand-hover"
       >
-        {copied ? "Copied" : "Copy receipt link"}
+        <Download className="h-4 w-4" aria-hidden="true" />
+        Download receipt
       </button>
+      {explorerUrl ? (
+        <a
+          href={explorerUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-2 rounded-xl border border-line bg-white px-4 py-2.5 text-sm font-semibold text-ink-heading shadow-sm transition hover:bg-slate-50"
+        >
+          <ExternalLink className="h-4 w-4" aria-hidden="true" />
+          View transaction
+        </a>
+      ) : null}
     </div>
   );
 }

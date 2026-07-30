@@ -51,7 +51,7 @@ const outcomes = [
 
 function ProductMockup() {
   return (
-    <div className="relative">
+    <div className="relative animate-[fadeIn_500ms_ease-out]">
       <div className="absolute -left-8 top-12 hidden rounded-2xl border border-brand-100 bg-white p-4 shadow-card lg:block">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-50 text-brand-700">
@@ -137,13 +137,13 @@ export default function HomePage() {
               <VeloxPayLogo className="h-14 w-14" />
               <p className="vp-eyebrow">Programmable money on Arc</p>
             </div>
-            <h1 className="mt-7 max-w-3xl text-4xl font-semibold leading-tight tracking-tight text-ink-heading sm:text-6xl">
+            <h1 className="mt-7 max-w-3xl text-4xl font-semibold leading-tight tracking-tight text-ink-heading sm:text-6xl [animation:fadeIn_700ms_ease-out]">
               Programmable stablecoin payments for global teams.
             </h1>
-            <p className="mt-6 max-w-2xl text-lg leading-8 text-ink-body">
+            <p className="mt-6 max-w-2xl text-lg leading-8 text-ink-body [animation:fadeIn_850ms_ease-out]">
               Create payment requests. Split payments automatically. Protect funds until work is approved.
             </p>
-            <div className="mt-8 flex flex-wrap gap-3">
+            <div className="mt-8 flex flex-wrap gap-3 [animation:fadeIn_1000ms_ease-out]">
               <Button asChild className="gap-2">
                 <Link href="/dashboard">
                   Launch App
@@ -171,7 +171,7 @@ export default function HomePage() {
           {trustCards.map((card) => {
             const Icon = card.icon;
             return (
-              <div key={card.title} className="rounded-2xl border border-line bg-white p-6 shadow-card">
+              <div key={card.title} className="rounded-2xl border border-line bg-white p-6 shadow-card transition duration-200 ease-out hover:-translate-y-1 hover:shadow-[0_18px_45px_rgba(15,23,42,0.08)]">
                 <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-brand-50 text-brand-700">
                   <Icon className="h-5 w-5" aria-hidden="true" />
                 </div>
@@ -200,7 +200,7 @@ export default function HomePage() {
           {steps.map((step, index) => {
             const Icon = step.icon;
             return (
-              <div key={step.title} className="relative rounded-2xl border border-line bg-white p-5 shadow-sm">
+              <div key={step.title} className="relative rounded-2xl border border-line bg-white p-5 shadow-sm transition duration-200 ease-out hover:-translate-y-1 hover:shadow-[0_14px_35px_rgba(15,23,42,0.07)]">
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-brand-50 text-brand-700">
                     <Icon className="h-5 w-5" aria-hidden="true" />
@@ -226,7 +226,7 @@ export default function HomePage() {
           </p>
           <div className="mt-7 space-y-4">
             {outcomes.map(([title, description]) => (
-              <div key={title} className="rounded-2xl border border-line bg-white p-5 shadow-sm">
+              <div key={title} className="rounded-2xl border border-line bg-white p-5 shadow-sm transition duration-200 ease-out hover:-translate-y-1 hover:shadow-[0_14px_35px_rgba(15,23,42,0.07)]">
                 <div className="flex items-start gap-3">
                   <CheckCircle className="mt-0.5 h-5 w-5 text-brand-700" aria-hidden="true" />
                   <div>

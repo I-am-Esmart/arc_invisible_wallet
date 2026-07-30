@@ -71,7 +71,7 @@ export function AppHeader() {
               const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
 
               return (
-                <Button key={item.href} asChild variant={isActive ? "secondary" : "ghost"}>
+                <Button key={item.href} asChild variant={isActive ? "secondary" : "ghost"} className="transition-transform duration-200 hover:-translate-y-0.5">
                   <Link href={item.href}>{item.label}</Link>
                 </Button>
               );

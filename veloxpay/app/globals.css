@@ -34,6 +34,14 @@ a {
   @apply text-brand-600;
 }
 
+button,
+a,
+input,
+textarea,
+select {
+  @apply transition duration-200 ease-out;
+}
+
 ::selection {
   @apply bg-brand-100 text-brand-700;
 }
@@ -43,6 +51,17 @@ a {
   textarea,
   select {
     @apply border-line bg-white text-ink-heading placeholder:text-slate-400;
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
   }
 }
 

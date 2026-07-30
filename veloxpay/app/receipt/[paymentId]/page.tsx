@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
+import { CheckCircle, Circle, ExternalLink, ReceiptText } from "lucide-react";
 import { Card } from "@/components/ui/card";
-import { PaymentTimeline } from "@/components/shared/payment-timeline";
 import { ReceiptActions } from "@/components/payment/receipt-actions";
 import { getPaymentReceipt, listPayments } from "@/lib/api/payments";
 import { getSmartRequestByPaymentLinkId } from "@/lib/api/smart-requests";
@@ -9,6 +9,7 @@ import {
   formatAllocationBps,
 } from "@/lib/smart-requests/receipt";
 import type { SmartRequest } from "@/lib/types/smart-request";
+import type { PaymentTimelineEvent } from "@/lib/types/payment-link";
 import { formatDate, formatMoney } from "@/lib/utils/format";
 
 type ReceiptPageProps = {
@@ -43,60 +44,94 @@ export default async function ReceiptPage({ params, searchParams }: ReceiptPageP
     : null;
   const verification = buildSmartRequestReceiptVerification(payment, smartRequest);
   const receiptUrl = payment.receiptUrl || `/receipt/${payment.id}`;
+  const network = smartRequest?.chain || "Arc";
+  const toLabel = smartRequest?.creatorUserId || payment.ownerEmail || payment.linkLabel || payment.linkId || "-";
+  const fromLabel = payment.payerEmail || smartRequest?.actualPayerEmail || smartRequest?.expectedPayerEmail || "-";
 
   return (
-    <main className="receipt-page mx-auto max-w-4xl space-y-6 print:max-w-none print:space-y-4">
-      <section className="rounded-3xl bg-white p-8 shadow-sm ring-1 ring-slate-200 print:rounded-none print:p-0 print:shadow-none print:ring-0">
-        <p className="text-sm font-medium uppercase tracking-[0.2em] text-brand-600">Receipt</p>
-        <h1 className="mt-2 text-3xl font-semibold text-slate-900">Payment confirmation</h1>
-        <p className="mt-3 max-w-2xl text-sm text-slate-600">
-          Share this page as proof that the payment request was completed.
-        </p>
-      </section>
-
-      <Card className="print:rounded-none print:p-0 print:shadow-none print:ring-0">
-        <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
-          <div className="space-y-4">
-            <div>
-              <div className="text-sm text-slate-500">Amount paid</div>
-              <div className="mt-1 text-4xl font-semibold text-slate-900">
-                {formatMoney(payment.amount, payment.currency)}
+    <main className="receipt-page mx-auto max-w-5xl space-y-6 print:max-w-none print:space-y-4">
+      <section className="rounded-2xl border border-line bg-white p-6 shadow-card print:rounded-none print:border-0 print:p-0 print:shadow-none sm:p-8">
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100">
+                <CheckCircle className="h-7 w-7" aria-hidden="true" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold uppercase tracking-[0.16em] text-brand-700">Receipt</p>
+                <h1 className="mt-1 text-2xl font-semibold text-ink-heading">Payment completed</h1>
               </div>
             </div>
-            <div className="grid gap-4 text-sm text-slate-600 sm:grid-cols-2">
-              <div>
-                <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Payment request</div>
-                <div className="mt-1 text-slate-900">{payment.linkLabel || payment.linkId}</div>
+            <div className="mt-8 text-5xl font-semibold tracking-tight text-ink-heading">
+              {formatMoney(payment.amount, payment.currency)}
+            </div>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-ink-body">
+              This receipt confirms the payment request was completed and recorded by VeloxPay.
+            </p>
+          </div>
+
+          <ReceiptActions receiptUrl={receiptUrl} explorerUrl={payment.explorerUrl} />
+        </div>
+      </section>
+
+      <Card className="print:rounded-none print:border-0 print:p-0 print:shadow-none">
+        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          <SummaryItem label="From" value={fromLabel} />
+          <SummaryItem label="To" value={toLabel} />
+          <SummaryItem label="Amount" value={formatMoney(payment.amount, payment.currency)} />
+          <SummaryItem label="Network" value={network} />
+          <SummaryItem label="Status" value={payment.status || smartRequest?.onchainStatus || "-"} />
+        </section>
+
+        <section className="mt-8 grid gap-6 lg:grid-cols-[minmax(0,1fr)_0.9fr]">
+          <div className="rounded-2xl border border-line bg-slate-50 p-5">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-brand-700 ring-1 ring-line">
+                <ExternalLink className="h-5 w-5" aria-hidden="true" />
               </div>
               <div>
-                <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Paid at</div>
-                <div className="mt-1 text-slate-900">{formatDate(payment.paidAt)}</div>
+                <h2 className="text-base font-semibold text-ink-heading">Transaction</h2>
+                <p className="text-sm text-ink-muted">Arc settlement details</p>
               </div>
-              <div>
-                <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Payer</div>
-                <div className="mt-1 text-slate-900">{payment.payerEmail || "-"}</div>
+            </div>
+            <div className="mt-5">
+              <div className="text-xs font-semibold uppercase tracking-[0.16em] text-ink-muted">
+                Transaction hash
               </div>
-              <div>
-                <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Status</div>
-                <div className="mt-1 text-slate-900">{payment.status}</div>
+              <div className="mt-2 break-all rounded-xl bg-white p-3 font-mono text-xs text-ink-heading ring-1 ring-line">
+                {payment.transactionHash || "-"}
               </div>
-              {smartRequest ? (
-                <>
-                  <div>
-                    <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Payment mode</div>
-                    <div className="mt-1 capitalize text-slate-900">{smartRequest.mode}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Contract status</div>
-                    <div className="mt-1 text-slate-900">{smartRequest.onchainStatus}</div>
-                  </div>
-                </>
+              {payment.explorerUrl ? (
+                <a
+                  href={payment.explorerUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-4 inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-brand-700 ring-1 ring-brand-100 transition hover:bg-brand-50"
+                >
+                  View on Arc Explorer
+                  <ExternalLink className="h-4 w-4" aria-hidden="true" />
+                </a>
               ) : null}
             </div>
           </div>
 
-          <ReceiptActions receiptUrl={receiptUrl} />
-        </div>
+          <div className="rounded-2xl border border-line bg-white p-5">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-50 text-brand-700">
+                <ReceiptText className="h-5 w-5" aria-hidden="true" />
+              </div>
+              <div>
+                <h2 className="text-base font-semibold text-ink-heading">Timeline</h2>
+                <p className="text-sm text-ink-muted">Payment confirmation flow</p>
+              </div>
+            </div>
+            <ReceiptTimeline
+              timeline={payment.timeline}
+              paidAt={payment.paidAt}
+              smartRequest={smartRequest}
+            />
+          </div>
+        </section>
 
         {smartRequest && verification ? (
           <SmartRequestReceiptDetails
@@ -106,36 +141,8 @@ export default async function ReceiptPage({ params, searchParams }: ReceiptPageP
             verification={verification}
           />
         ) : null}
-
-        <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-          <div className="rounded-3xl border border-slate-200 bg-white p-4">
-            <h2 className="text-sm font-semibold text-slate-900">Receipt timeline</h2>
-            <div className="mt-4">
-              <PaymentTimeline timeline={payment.timeline} />
-            </div>
-          </div>
-
-          <div className="rounded-3xl border border-slate-200 bg-white p-4">
-            <h2 className="text-sm font-semibold text-slate-900">Transaction details</h2>
-            <div className="mt-4 space-y-3 text-sm text-slate-600">
-              <div>
-                <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Transaction hash</div>
-                <div className="mt-1 break-all font-mono text-slate-900">{payment.transactionHash || "-"}</div>
-              </div>
-              {payment.explorerUrl ? (
-                <a
-                  href={payment.explorerUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center font-medium text-brand-600 hover:underline"
-                >
-                  View on Arc Explorer
-                </a>
-              ) : null}
-            </div>
-          </div>
-        </div>
       </Card>
+
       <style>{`
         @media print {
           @page {
@@ -166,6 +173,76 @@ export default async function ReceiptPage({ params, searchParams }: ReceiptPageP
   );
 }
 
+function SummaryItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl border border-line bg-slate-50 p-4">
+      <div className="text-xs font-semibold uppercase tracking-[0.16em] text-ink-muted">{label}</div>
+      <div className="mt-2 break-all text-sm font-semibold text-ink-heading">{value || "-"}</div>
+    </div>
+  );
+}
+
+function ReceiptTimeline({
+  timeline,
+  paidAt,
+  smartRequest,
+}: {
+  timeline?: PaymentTimelineEvent[];
+  paidAt?: string;
+  smartRequest: SmartRequest | null;
+}) {
+  const firstTimelineDate = timeline?.[0]?.at;
+  const initiatedDate = timeline?.find((event) => event.status === "code_requested")?.at || firstTimelineDate;
+  const confirmedDate = paidAt || timeline?.find((event) => event.status === "paid")?.at;
+  const items = [
+    {
+      label: "Request created",
+      at: smartRequest?.createdAt || firstTimelineDate,
+      complete: true,
+    },
+    {
+      label: "Payment initiated",
+      at: initiatedDate,
+      complete: Boolean(initiatedDate || confirmedDate),
+    },
+    {
+      label: "Payment confirmed",
+      at: confirmedDate,
+      complete: Boolean(confirmedDate),
+    },
+    {
+      label: "Receipt generated",
+      at: confirmedDate || new Date().toISOString(),
+      complete: true,
+    },
+  ];
+
+  return (
+    <div className="mt-5 space-y-4">
+      {items.map((item, index) => (
+        <div key={item.label} className="flex gap-3">
+          <div className="mt-0.5 flex flex-col items-center">
+            <div className={`flex h-6 w-6 items-center justify-center rounded-full ${
+              item.complete ? "bg-brand text-white" : "bg-slate-100 text-slate-400"
+            }`}>
+              {item.complete ? (
+                <CheckCircle className="h-4 w-4" aria-hidden="true" />
+              ) : (
+                <Circle className="h-3 w-3" aria-hidden="true" />
+              )}
+            </div>
+            {index < items.length - 1 ? <div className="mt-1 h-8 w-px bg-line" /> : null}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-semibold text-ink-heading">{item.label}</div>
+            <div className="mt-1 text-xs text-ink-muted">{formatDate(item.at)}</div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function SmartRequestReceiptDetails({
   smartRequest,
   paymentTransactionHash,
@@ -183,24 +260,24 @@ function SmartRequestReceiptDetails({
 
   return (
     <div className="mt-8 space-y-6">
-      <section className={`avoid-break rounded-3xl border p-5 ${
+      <section className={`avoid-break rounded-2xl border p-5 ${
         verification.status === "verified"
           ? "border-emerald-200 bg-emerald-50"
           : verification.status === "failed"
             ? "border-rose-200 bg-rose-50"
             : "border-amber-200 bg-amber-50"
       }`}>
-        <div className="text-sm font-semibold text-slate-900">{verification.label}</div>
-        <p className="mt-2 text-sm leading-6 text-slate-700">{verification.reason}</p>
-        <div className="mt-4 grid gap-3 text-xs text-slate-700 sm:grid-cols-2">
+        <div className="text-sm font-semibold text-ink-heading">{verification.label}</div>
+        <p className="mt-2 text-sm leading-6 text-ink-body">{verification.reason}</p>
+        <div className="mt-4 grid gap-3 text-xs text-ink-body sm:grid-cols-2">
           <HashLine label="Recalculated metadata hash" value={verification.recalculatedMetadataHash} />
           <HashLine label="Contract metadata hash" value={verification.contractMetadataHash || "-"} />
         </div>
       </section>
 
-      <section className="avoid-break rounded-3xl border border-slate-200 bg-white p-5">
-        <h2 className="text-sm font-semibold text-slate-900">Smart Request details</h2>
-        <div className="mt-4 grid gap-4 text-sm text-slate-600 sm:grid-cols-2">
+      <section className="avoid-break rounded-2xl border border-line bg-white p-5">
+        <h2 className="text-sm font-semibold text-ink-heading">Smart Request details</h2>
+        <div className="mt-4 grid gap-4 text-sm text-ink-body sm:grid-cols-2">
           <Detail label="Payment mode" value={smartRequest.mode} />
           <Detail label="Onchain request ID" value={smartRequest.onchainRequestId || "-"} mono />
           <Detail label="Contract address" value={smartRequest.contractAddress || "-"} mono />
@@ -216,31 +293,31 @@ function SmartRequestReceiptDetails({
         </div>
       </section>
 
-      <section className="avoid-break rounded-3xl border border-slate-200 bg-white p-5">
-        <h2 className="text-sm font-semibold text-slate-900">Recipients and settlement</h2>
+      <section className="avoid-break rounded-2xl border border-line bg-white p-5">
+        <h2 className="text-sm font-semibold text-ink-heading">Recipients and settlement</h2>
         <div className="mt-4 space-y-3">
           {smartRequest.recipients.map((recipient, index) => (
-            <div key={`${recipient.walletAddress}-${index}`} className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-700">
+            <div key={`${recipient.walletAddress}-${index}`} className="rounded-xl bg-slate-50 p-4 text-sm text-ink-body">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                 <div>
-                  <div className="font-semibold text-slate-900">{recipient.name || recipient.email || `Recipient ${index + 1}`}</div>
-                  {recipient.role ? <div className="mt-1 text-xs text-slate-500">{recipient.role}</div> : null}
-                  {recipient.email ? <div className="mt-1 text-xs text-slate-500">{recipient.email}</div> : null}
+                  <div className="font-semibold text-ink-heading">{recipient.name || recipient.email || `Recipient ${index + 1}`}</div>
+                  {recipient.role ? <div className="mt-1 text-xs text-ink-muted">{recipient.role}</div> : null}
+                  {recipient.email ? <div className="mt-1 text-xs text-ink-muted">{recipient.email}</div> : null}
                 </div>
                 <div className="text-left sm:text-right">
                   <div>{formatAllocationBps(recipient.allocationBps)}</div>
-                  <div className="font-semibold text-slate-900">{recipient.amount} {smartRequest.currency}</div>
+                  <div className="font-semibold text-ink-heading">{recipient.amount} {smartRequest.currency}</div>
                 </div>
               </div>
-              <div className="mt-2 break-all font-mono text-xs text-slate-500">{recipient.walletAddress}</div>
+              <div className="mt-2 break-all font-mono text-xs text-ink-muted">{recipient.walletAddress}</div>
             </div>
           ))}
         </div>
       </section>
 
-      <section className="avoid-break rounded-3xl border border-slate-200 bg-white p-5">
-        <h2 className="text-sm font-semibold text-slate-900">Transactions and timestamps</h2>
-        <div className="mt-4 grid gap-4 text-sm text-slate-600 sm:grid-cols-2">
+      <section className="avoid-break rounded-2xl border border-line bg-white p-5">
+        <h2 className="text-sm font-semibold text-ink-heading">Transactions and timestamps</h2>
+        <div className="mt-4 grid gap-4 text-sm text-ink-body sm:grid-cols-2">
           <TransactionDetail label="Funding transaction" hash={smartRequest.fundingTransactionHash || paymentTransactionHash} href={fundingExplorerUrl} />
           <TransactionDetail label="Release or refund transaction" hash={releaseOrRefundHash || "-"} href={releaseOrRefundExplorerUrl} />
           <Detail label="Created" value={formatDate(verification.timestamps.created)} />
@@ -264,8 +341,8 @@ function Detail({
 }) {
   return (
     <div>
-      <div className="text-xs uppercase tracking-[0.18em] text-slate-400">{label}</div>
-      <div className={`mt-1 break-all text-slate-900 ${mono ? "font-mono text-xs" : ""}`}>{value || "-"}</div>
+      <div className="text-xs font-semibold uppercase tracking-[0.16em] text-ink-muted">{label}</div>
+      <div className={`mt-1 break-all text-ink-heading ${mono ? "font-mono text-xs" : ""}`}>{value || "-"}</div>
     </div>
   );
 }
@@ -273,8 +350,8 @@ function Detail({
 function HashLine({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <div className="text-xs uppercase tracking-[0.18em] text-slate-500">{label}</div>
-      <div className="mt-1 break-all font-mono text-xs text-slate-900">{value}</div>
+      <div className="text-xs font-semibold uppercase tracking-[0.16em] text-ink-muted">{label}</div>
+      <div className="mt-1 break-all font-mono text-xs text-ink-heading">{value}</div>
     </div>
   );
 }
@@ -290,11 +367,12 @@ function TransactionDetail({
 }) {
   return (
     <div>
-      <div className="text-xs uppercase tracking-[0.18em] text-slate-400">{label}</div>
-      <div className="mt-1 break-all font-mono text-xs text-slate-900">{hash || "-"}</div>
+      <div className="text-xs font-semibold uppercase tracking-[0.16em] text-ink-muted">{label}</div>
+      <div className="mt-1 break-all font-mono text-xs text-ink-heading">{hash || "-"}</div>
       {href ? (
-        <a href={href} target="_blank" rel="noreferrer" className="mt-2 inline-flex font-medium text-brand-600 hover:underline">
+        <a href={href} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-2 font-semibold text-brand-700 hover:text-brand-hover">
           View on Arc Explorer
+          <ExternalLink className="h-4 w-4" aria-hidden="true" />
         </a>
       ) : null}
     </div>
