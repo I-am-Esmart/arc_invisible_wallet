@@ -36,9 +36,9 @@ export function PaymentStatus({
         : "Payment paused";
 
   return (
-    <div className="mt-6 rounded-2xl border border-line bg-white p-5 shadow-card">
+    <div className="mt-6 rounded-[24px] border border-slate-200/80 bg-gradient-to-br from-white via-white to-brand-50/20 p-5 shadow-[0_18px_45px_rgba(15,23,42,0.04)]">
       <div className="flex items-start gap-4">
-        <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${
+        <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${
           status === "success" ? "bg-emerald-50 text-emerald-700" : "bg-brand-50 text-brand-700"
         }`}>
           {status === "success" ? <CheckCircle className="h-6 w-6" aria-hidden="true" /> : <ReceiptText className="h-6 w-6" aria-hidden="true" />}
@@ -50,7 +50,7 @@ export function PaymentStatus({
       </div>
 
       {transactionHash ? (
-        <div className="mt-5 rounded-xl border border-line bg-slate-50 p-4 text-sm text-ink-body">
+        <div className="mt-5 rounded-[20px] border border-slate-200/80 bg-slate-50/80 p-4 text-sm text-ink-body shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]">
           <div className="text-xs font-semibold uppercase tracking-[0.16em] text-ink-muted">
             Transaction hash
           </div>
@@ -83,7 +83,7 @@ export function PaymentStatus({
       ) : null}
 
       {createWalletUrl ? (
-        <div className="mt-4 rounded-2xl bg-slate-50 p-4 ring-1 ring-line">
+        <div className="mt-4 rounded-[20px] border border-slate-200/80 bg-slate-50/80 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]">
           <p className="text-sm leading-6 text-ink-body">
             New to VeloxPay? Create your wallet first, then come back here to finish the payment.
           </p>

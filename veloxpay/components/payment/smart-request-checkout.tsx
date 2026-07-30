@@ -439,7 +439,7 @@ export function SmartRequestCheckout({
 
   return (
     <div className="space-y-5">
-      <div className="rounded-2xl border border-slate-200 bg-white p-4">
+      <div className="rounded-[24px] border border-slate-200/80 bg-gradient-to-br from-white via-white to-brand-50/20 p-4 shadow-[0_18px_45px_rgba(15,23,42,0.04)]">
         <div className="text-sm font-semibold text-slate-900">Smart Request checkout</div>
         <div className="mt-3 grid gap-2">
           {PHASES.map((entry) => {
@@ -448,7 +448,7 @@ export function SmartRequestCheckout({
             const isDone = completed || (currentIndex > entryIndex && currentIndex >= 0);
             const isCurrent = phase === entry.id;
             return (
-              <div key={entry.id} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2 text-sm">
+              <div key={entry.id} className="flex items-center justify-between rounded-2xl border border-slate-200/80 bg-slate-50/80 px-3 py-2 text-sm shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]">
                 <span className="capitalize text-slate-700">{entry.label}</span>
                 <span className={isDone ? "text-emerald-700" : isCurrent ? "text-brand-700" : "text-slate-400"}>
                   {isDone ? "done" : isCurrent ? "in progress" : "waiting"}
@@ -533,7 +533,7 @@ export function SmartRequestCheckout({
       ) : null}
 
       {smartRequest.currency === "EURC" ? (
-        <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">
+        <div className="rounded-[20px] border border-slate-200/80 bg-slate-50/80 p-4 text-sm text-slate-600 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]">
           EURC payments stay on Arc Testnet for now.
         </div>
       ) : null}
@@ -562,7 +562,7 @@ export function SmartRequestCheckout({
       {error ? <p className="rounded-2xl bg-rose-50 p-4 text-sm text-rose-700">{error}</p> : null}
 
       {(approval || paymentTransaction || receiptUrl) ? (
-        <div className="space-y-4 rounded-2xl border border-line bg-white p-5 text-sm shadow-card">
+        <div className="space-y-4 rounded-[24px] border border-slate-200/80 bg-white/90 p-5 text-sm shadow-[0_18px_45px_rgba(15,23,42,0.04)]">
           {completed ? (
             <div className="flex items-start gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100">
@@ -609,7 +609,7 @@ function TransactionLink({
   const href = txExplorerUrl(transaction);
 
   return (
-    <div className="rounded-xl border border-line bg-slate-50 p-4">
+    <div className="rounded-[20px] border border-slate-200/80 bg-slate-50/80 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]">
       <div className="text-xs font-semibold uppercase tracking-[0.16em] text-ink-muted">{label}</div>
       <div className="mt-2 break-all font-mono text-xs text-ink-heading">{transaction.txHash || transaction.id}</div>
       {hasConfirmedGasSponsorship(transaction) ? (

@@ -35,7 +35,7 @@ export function ReceiptActions({
       <button
         type="button"
         onClick={() => window.print()}
-        className="inline-flex items-center gap-2 rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-white shadow-button transition hover:bg-brand-hover"
+        className="inline-flex items-center gap-2 rounded-2xl bg-brand px-4 py-2.5 text-sm font-semibold text-white shadow-[0_10px_25px_rgba(37,99,235,0.2)] transition hover:bg-brand-hover"
       >
         <Download className="h-4 w-4" aria-hidden="true" />
         Download receipt
@@ -45,7 +45,7 @@ export function ReceiptActions({
           href={explorerUrl}
           target="_blank"
           rel="noreferrer"
-          className="inline-flex items-center gap-2 rounded-xl border border-line bg-white px-4 py-2.5 text-sm font-semibold text-ink-heading shadow-sm transition hover:bg-slate-50"
+          className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-ink-heading shadow-sm transition hover:bg-slate-50"
         >
           <ExternalLink className="h-4 w-4" aria-hidden="true" />
           View transaction

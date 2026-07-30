@@ -47,7 +47,7 @@ export default function WalletPage() {
 
   return (
     <main className="space-y-8">
-      <section className="flex flex-col gap-4 rounded-2xl border border-line bg-white p-8 shadow-card lg:flex-row lg:items-end lg:justify-between">
+      <section className="vp-shell flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <p className="vp-eyebrow">Wallet</p>
           <h1 className="mt-3 text-3xl font-semibold text-ink-heading">Your wallet in one place</h1>
@@ -98,7 +98,7 @@ export default function WalletPage() {
             {walletUser.gasMode === "sponsored" ? "Gas sponsored with Circle Gas Station." : "Arc fees are paid in USDC."}
           </p>
         </Card>
-        <Card className="border-brand-100 bg-brand-50">
+        <Card className="border-brand-200 bg-gradient-to-br from-brand-50 to-white">
           <div className="text-sm text-brand-700">Wallet address</div>
           <div className="mt-2 break-all font-mono text-sm text-ink-heading">{walletUser.address}</div>
           <button
@@ -116,10 +116,10 @@ export default function WalletPage() {
           <p className="mt-2 text-sm text-slate-600">
             Share your wallet address directly or use the QR code below.
           </p>
-          <div className="mt-6 flex justify-center rounded-3xl bg-slate-50 p-6">
+          <div className="mt-6 flex justify-center rounded-[24px] border border-slate-200 bg-slate-50/70 p-6 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]">
             <QRCodeCanvas value={walletUser.address} size={220} bgColor="#ffffff" fgColor="#0f172a" />
           </div>
-          <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <div className="mt-5 rounded-[24px] border border-slate-200 bg-slate-50/70 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]">
             <div className="flex items-center justify-between gap-3">
               <div className="text-xs uppercase tracking-[0.2em] text-slate-500">Wallet address</div>
               <button
@@ -169,7 +169,7 @@ export default function WalletPage() {
                     const explorerUrl = tx.explorerUrl || tx.explorer;
 
                     return (
-                      <tr key={`${tx.hash}-${tx.symbol || tx.token || "token"}`}>
+                      <tr key={`${tx.hash}-${tx.symbol || tx.token || "token"}`} className="transition hover:bg-slate-50/80">
                         <td className="py-4 pr-6 text-slate-700">
                           {explorerUrl ? (
                             <a href={explorerUrl} target="_blank" rel="noreferrer" className="font-mono text-xs text-brand-600 hover:underline">

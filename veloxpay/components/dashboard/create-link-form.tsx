@@ -449,7 +449,7 @@ export function CreateLinkForm({
   }
 
   return (
-    <Card className={compact ? "" : "max-w-4xl"}>
+    <Card className={compact ? "vp-panel" : "vp-shell max-w-4xl"}>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p className="vp-eyebrow">Request builder</p>
@@ -474,12 +474,12 @@ export function CreateLinkForm({
               key={step}
               type="button"
               onClick={() => goToStep(stepNumber)}
-              className={`rounded-xl border px-3 py-3 text-left transition ${
+              className={`rounded-2xl border px-3 py-3 text-left transition ${
                 isActive
-                  ? "border-brand-500 bg-brand-50 text-brand-700 ring-2 ring-brand-100"
+                  ? "border-brand-500 bg-brand-50 text-brand-700 shadow-[0_10px_30px_rgba(37,99,235,0.12)] ring-2 ring-brand-100"
                   : isDone
-                    ? "border-emerald-100 bg-emerald-50 text-emerald-700"
-                    : "border-line bg-white text-ink-muted hover:bg-slate-50"
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                    : "border-line bg-white text-ink-muted hover:border-brand-200 hover:bg-slate-50"
               }`}
             >
               <div className="flex items-center gap-2">
@@ -541,7 +541,7 @@ export function CreateLinkForm({
             </Field>
 
             {walletUser?.email ? (
-              <div className="rounded-2xl border border-line bg-slate-50 p-4">
+              <div className="vp-soft">
                 <div className="flex items-start gap-3">
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-brand-700 ring-1 ring-line">
                     <Wallet className="h-5 w-5" aria-hidden="true" />
@@ -612,7 +612,7 @@ export function CreateLinkForm({
             </div>
 
             {customers.length ? (
-              <div className="rounded-2xl border border-line bg-white p-4">
+              <div className="vp-panel">
                 <div className="text-sm font-semibold text-ink-heading">Recent customers</div>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {customers.slice(0, 6).map((customer) => (
@@ -761,7 +761,7 @@ export function CreateLinkForm({
             </div>
 
             {paymentMode === "protected" ? (
-              <div className="space-y-5 rounded-2xl border border-brand-100 bg-brand-50 p-5">
+              <div className="space-y-5 rounded-[24px] border border-brand-200/80 bg-gradient-to-br from-brand-50/80 to-white p-5 shadow-[0_16px_40px_rgba(37,99,235,0.08)]">
                 <div className="flex items-start gap-3">
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-brand-700 ring-1 ring-brand-100">
                     <Lock className="h-5 w-5" aria-hidden="true" />
@@ -796,7 +796,7 @@ export function CreateLinkForm({
                 </div>
               </div>
             ) : (
-              <div className="rounded-2xl border border-line bg-slate-50 p-6">
+              <div className="vp-soft">
                 <div className="flex items-start gap-3">
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-brand-700 ring-1 ring-line">
                     <ReceiptText className="h-5 w-5" aria-hidden="true" />
@@ -817,7 +817,7 @@ export function CreateLinkForm({
               <h3 className="text-lg font-semibold text-ink-heading">Review</h3>
               <p className="mt-2 text-sm text-ink-body">Confirm the payment amount, recipients, mode, and rules.</p>
             </div>
-            <div className="rounded-2xl border border-line bg-slate-50 p-5">
+            <div className="vp-soft">
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
                   <div className="text-xs font-semibold uppercase tracking-[0.16em] text-ink-muted">Payment amount</div>
@@ -866,8 +866,8 @@ export function CreateLinkForm({
       </form>
 
       {state.message ? (
-        <div className={`mt-5 rounded-2xl p-4 text-sm ${
-          state.status === "success" ? "bg-emerald-50 text-emerald-800" : "bg-rose-50 text-rose-700"
+        <div className={`mt-5 rounded-[24px] border p-4 text-sm ${
+          state.status === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-rose-200 bg-rose-50 text-rose-700"
         }`}>
           <p>{state.message}</p>
           {state.url ? (

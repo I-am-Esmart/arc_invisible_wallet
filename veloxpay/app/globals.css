@@ -70,6 +70,18 @@ select {
     @apply rounded-2xl border border-line bg-white p-6 shadow-card sm:p-8;
   }
 
+  .vp-shell {
+    @apply rounded-[28px] border border-slate-200/80 bg-gradient-to-br from-white via-white to-brand-50/30 p-6 shadow-[0_24px_80px_rgba(15,23,42,0.06)] sm:p-8;
+  }
+
+  .vp-panel {
+    @apply rounded-3xl border border-slate-200/80 bg-white/90 p-5 shadow-[0_18px_45px_rgba(15,23,42,0.04)] backdrop-blur;
+  }
+
+  .vp-soft {
+    @apply rounded-3xl border border-slate-200/80 bg-slate-50/80 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)];
+  }
+
   .vp-eyebrow {
     @apply inline-flex rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-brand-700;
   }
