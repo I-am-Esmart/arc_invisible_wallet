@@ -4,15 +4,14 @@ import {
   CheckCircle,
   Link2,
   ReceiptText,
-  Send,
   Shield,
   Users,
-  Wallet,
 } from "lucide-react";
 import { VeloxPayLogo } from "@/components/brand/veloxpay-logo";
 import { Button } from "@/components/ui/button";
 import { ProductMockup } from "@/components/marketing/product-mockup";
 import { SplitFlowDiagram } from "@/components/marketing/split-flow-diagram";
+import { HowItWorksSteps } from "@/components/marketing/how-it-works";
 import { RevealGroup, RevealItem } from "@/components/motion/reveal";
 
 const trustCards = [
@@ -36,13 +35,6 @@ const trustCards = [
     title: "Verified Receipts",
     description: "Track settlement, metadata, recipients, and explorer links after payment.",
   },
-];
-
-const steps = [
-  { icon: Wallet, title: "Create payment request" },
-  { icon: Link2, title: "Share payment link" },
-  { icon: Send, title: "Receive USDC/EURC" },
-  { icon: CheckCircle, title: "Track settlement" },
 ];
 
 const outcomes = [
@@ -130,22 +122,7 @@ export default function HomePage() {
           </p>
         </div>
 
-        <div className="mt-8 grid gap-4 lg:grid-cols-4">
-          {steps.map((step, index) => {
-            const Icon = step.icon;
-            return (
-              <div key={step.title} className="relative rounded-2xl border border-line bg-white p-5 shadow-sm transition duration-200 ease-out hover:-translate-y-1 hover:shadow-[0_14px_35px_rgba(15,23,42,0.07)]">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-brand-50 text-brand-700">
-                    <Icon className="h-5 w-5" aria-hidden="true" />
-                  </div>
-                  <span className="text-sm font-semibold text-ink-muted">0{index + 1}</span>
-                </div>
-                <h3 className="mt-5 text-base font-semibold text-ink-heading">{step.title}</h3>
-              </div>
-            );
-          })}
-        </div>
+        <HowItWorksSteps />
       </section>
 
       <section id="smart-requests" className="grid gap-8 py-16 lg:grid-cols-[1fr_0.9fr] lg:items-center">
