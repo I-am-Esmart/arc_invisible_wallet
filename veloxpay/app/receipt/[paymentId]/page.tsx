@@ -50,8 +50,9 @@ export default async function ReceiptPage({ params, searchParams }: ReceiptPageP
 
   return (
     <main className="receipt-page mx-auto max-w-5xl space-y-6 print:max-w-none print:space-y-4">
-      <section className="rounded-2xl border border-line bg-white p-6 shadow-card print:rounded-none print:border-0 print:p-0 print:shadow-none sm:p-8">
-        <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+      <section className="overflow-hidden rounded-[28px] border border-line bg-white shadow-[0_24px_80px_rgba(15,23,42,0.07)] print:rounded-none print:border-0 print:shadow-none">
+        <div className="border-b border-line bg-gradient-to-br from-white via-white to-brand-50/50 p-6 sm:p-8">
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <div className="flex items-center gap-3">
               <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100">
@@ -71,20 +72,38 @@ export default async function ReceiptPage({ params, searchParams }: ReceiptPageP
           </div>
 
           <ReceiptActions receiptUrl={receiptUrl} explorerUrl={payment.explorerUrl} />
+          </div>
+        </div>
+
+        <div className="grid gap-4 p-6 sm:grid-cols-3 sm:p-8">
+          <SummaryItem label="Receipt ID" value={payment.id} />
+          <SummaryItem label="Generated" value={formatDate(payment.paidAt || smartRequest?.updatedAt || smartRequest?.createdAt)} />
+          <SummaryItem label="Payment mode" value={smartRequest?.mode || "standard"} />
         </div>
       </section>
 
       <Card className="print:rounded-none print:border-0 print:p-0 print:shadow-none">
-        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <section>
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-ink-muted">Payment summary</p>
+              <h2 className="mt-1 text-xl font-semibold text-ink-heading">Settlement details</h2>
+            </div>
+            <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-100">
+              {payment.status || smartRequest?.onchainStatus || "completed"}
+            </span>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <SummaryItem label="From" value={fromLabel} />
           <SummaryItem label="To" value={toLabel} />
           <SummaryItem label="Amount" value={formatMoney(payment.amount, payment.currency)} />
           <SummaryItem label="Network" value={network} />
           <SummaryItem label="Status" value={payment.status || smartRequest?.onchainStatus || "-"} />
+          </div>
         </section>
 
         <section className="mt-8 grid gap-6 lg:grid-cols-[minmax(0,1fr)_0.9fr]">
-          <div className="rounded-2xl border border-line bg-slate-50 p-5">
+          <div className="rounded-[24px] border border-line bg-slate-50/80 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-brand-700 ring-1 ring-line">
                 <ExternalLink className="h-5 w-5" aria-hidden="true" />
@@ -106,7 +125,7 @@ export default async function ReceiptPage({ params, searchParams }: ReceiptPageP
                   href={payment.explorerUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="mt-4 inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-brand-700 ring-1 ring-brand-100 transition hover:bg-brand-50"
+                  className="mt-4 inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-brand-700 ring-1 ring-brand-100 transition hover:-translate-y-0.5 hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-100"
                 >
                   View on Arc Explorer
                   <ExternalLink className="h-4 w-4" aria-hidden="true" />
@@ -115,7 +134,7 @@ export default async function ReceiptPage({ params, searchParams }: ReceiptPageP
             </div>
           </div>
 
-          <div className="rounded-2xl border border-line bg-white p-5">
+          <div className="rounded-[24px] border border-line bg-white p-5 shadow-sm">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-50 text-brand-700">
                 <ReceiptText className="h-5 w-5" aria-hidden="true" />

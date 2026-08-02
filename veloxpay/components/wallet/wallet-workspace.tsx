@@ -202,7 +202,7 @@ export function WalletWorkspace() {
           </div>
           <div className="flex flex-wrap gap-3">
             <Button variant="secondary" onClick={() => setShowFaucet(true)}>
-              Get faucet
+              Add funds
             </Button>
             <Button variant="ghost" onClick={handleLogout}>
               Log out

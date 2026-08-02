@@ -165,12 +165,8 @@ VELOXPAY_REQUESTS_CONTRACT_ADDRESS=
 CIRCLE_USER_CONTROLLED_APP_ID=
 ARC_APP_KIT_KEY=
 
-SMTP_HOST=
-SMTP_PORT=465
-SMTP_SECURE=true
-SMTP_USER=
-SMTP_PASS=
-OTP_FROM_EMAIL="VeloxPay <no-reply@example.com>"
+RESEND_API_KEY=
+EMAIL_FROM="VeloxPay <auth@useveloxpay.xyz>"
 ```
 
 Frontend, in `veloxpay/.env.local`:
@@ -178,8 +174,29 @@ Frontend, in `veloxpay/.env.local`:
 ```bash
 BACKEND_API_URL=http://localhost:4000
 NEXT_PUBLIC_BACKEND_API_URL=http://localhost:4000
-NEXT_PUBLIC_BUILDER_X_URL=https://x.com/cryptosmart121
 ```
+
+Production domain: `https://www.useveloxpay.xyz`. Set `FRONTEND_ORIGIN`, `PAYMENT_LINK_BASE_URL`, and `WALLET_APP_BASE_URL` to that URL in production so generated payment links, wallet links, and receipt links use the public VeloxPay domain.
+
+### Transactional email (Resend)
+
+All OTP, payment receipt, and payment notification emails are sent through [Resend](https://resend.com) using `RESEND_API_KEY` and `EMAIL_FROM` (see above). To go live:
+
+1. Create a Resend account and add `useveloxpay.xyz` as a domain under **Domains**.
+2. Resend will issue DNS records to add at your domain's DNS host (wherever `useveloxpay.xyz` is registered/managed):
+   - **SPF** — a `TXT` record (often combined into the domain's existing SPF record) authorizing Resend's sending servers.
+   - **DKIM** — one or more `CNAME`/`TXT` records (Resend generates the exact host/value pairs) used to cryptographically sign outgoing mail.
+   - **DMARC** — a `TXT` record at `_dmarc.useveloxpay.xyz`, e.g. `v=DMARC1; p=none; rua=mailto:support@useveloxpay.xyz`, to declare how receivers should handle SPF/DKIM failures.
+3. Wait for Resend to show the domain as **Verified** (DNS propagation can take up to 24-48 hours).
+4. Generate an API key in Resend and set it as `RESEND_API_KEY` in `backend/server/.env` (local) and your hosting provider's env config (production).
+5. Set `EMAIL_FROM="VeloxPay <auth@useveloxpay.xyz>"` in the same places. This is the sender for all wallet OTP, payment OTP, receipt, and payment notification emails.
+
+`support@useveloxpay.xyz` is used today only as the reply-to/contact identity shown in email footers and docs — it is **not** a monitored inbox. To actually receive mail sent to that address, either provision a mailbox for the domain (e.g. Google Workspace) or add an email-forwarding/routing rule at the DNS host that forwards `support@useveloxpay.xyz` to an existing inbox.
+
+Social links:
+
+- VeloxPay on X: `https://x.com/UseVeloxPay`
+- Built by Smart: `https://x.com/cryptosmart121`
 
 Contract deployment, in `contracts/.env`:
 

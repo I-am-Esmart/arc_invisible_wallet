@@ -6,7 +6,8 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 const zlib = require("zlib");
-const nodemailer = require("nodemailer");
+const { Resend } = require("resend");
+const { otpEmail, paymentReceiptEmail, paymentNotificationEmail } = require("./emails/templates");
 const { initiateDeveloperControlledWalletsClient } = require("@circle-fin/developer-controlled-wallets");
 const {
   executeBridgeWithCircleWallets,
@@ -79,8 +80,9 @@ const STORE_PATH = process.env.STORE_PATH
 const DEFAULT_OWNER_USERNAME = process.env.PAYMENT_LINK_OWNER_USERNAME || "emmanuel";
 const DEFAULT_OWNER_EMAIL = process.env.PAYMENT_LINK_OWNER_EMAIL || "emmanuel@example.com";
 const DEFAULT_LINK_CURRENCY = (process.env.PAYMENT_LINK_DEFAULT_CURRENCY || "USDC").toUpperCase();
-const DEFAULT_LINK_BASE_URL = (process.env.PAYMENT_LINK_BASE_URL || "http://localhost:3000").replace(/\/$/, "");
-const WALLET_APP_BASE_URL = (process.env.WALLET_APP_BASE_URL || DEFAULT_LINK_BASE_URL || "https://veloxpay.vercel.app").replace(/\/$/, "");
+const DEFAULT_PUBLIC_APP_URL = process.env.VERCEL ? "https://www.useveloxpay.xyz" : "http://localhost:3000";
+const DEFAULT_LINK_BASE_URL = (process.env.PAYMENT_LINK_BASE_URL || DEFAULT_PUBLIC_APP_URL).replace(/\/$/, "");
+const WALLET_APP_BASE_URL = (process.env.WALLET_APP_BASE_URL || DEFAULT_LINK_BASE_URL).replace(/\/$/, "");
 const PAYMENT_LINK_SIGNING_SECRET = process.env.PAYMENT_LINK_SIGNING_SECRET || "veloxpay-demo-secret";
 const OTP_CODE_TTL_MINUTES = Math.max(1, Number(process.env.OTP_CODE_TTL_MINUTES || 10));
 const OTP_MAX_ATTEMPTS = Math.max(1, Number(process.env.OTP_MAX_ATTEMPTS || 5));
@@ -93,7 +95,6 @@ const LOG_QUERY_CHUNK_SIZE = Math.max(250, Number(process.env.LOG_QUERY_CHUNK_SI
 const MAX_HISTORY_ITEMS = Math.max(10, Number(process.env.MAX_HISTORY_ITEMS || 20));
 const TX_RECEIPT_POLL_INTERVAL_MS = Math.max(2000, Number(process.env.TX_RECEIPT_POLL_INTERVAL_MS || 4000));
 const TX_RECEIPT_TIMEOUT_MS = Math.max(15000, Number(process.env.TX_RECEIPT_TIMEOUT_MS || 120000));
-const RESEND_API_URL = "https://api.resend.com/emails";
 const PERSISTENT_KV_URL = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL || "";
 const PERSISTENT_KV_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN || "";
 const HAS_PERSISTENT_KV = Boolean(PERSISTENT_KV_URL && PERSISTENT_KV_TOKEN);
@@ -561,8 +562,8 @@ function buildReadinessReport() {
     },
     {
       id: "email_delivery",
-      ok: Boolean((process.env.SMTP_USER && (process.env.SMTP_PASS || process.env.GMAIL_APP_PASSWORD)) || (process.env.RESEND_API_KEY && process.env.OTP_FROM_EMAIL)),
-      message: "Configure SMTP or Resend for OTP delivery."
+      ok: Boolean(process.env.RESEND_API_KEY && process.env.EMAIL_FROM),
+      message: "Configure RESEND_API_KEY and EMAIL_FROM for email delivery."
     },
     {
       id: "app_kit",
@@ -1748,119 +1749,60 @@ async function waitForTransactionReceiptWithBackoff(hash) {
 }
 
 async function sendEmailMessage({ to, subject, html }) {
-  const smtpUser = normalizeEmail(process.env.SMTP_USER);
-  const smtpPass = process.env.SMTP_PASS || process.env.GMAIL_APP_PASSWORD;
-  const smtpHost = process.env.SMTP_HOST || "smtp.gmail.com";
-  const smtpPort = Number(process.env.SMTP_PORT || 465);
-  const smtpSecure = String(process.env.SMTP_SECURE || "true").toLowerCase() !== "false";
-  const smtpFrom = process.env.OTP_FROM_EMAIL || process.env.SMTP_FROM_EMAIL || smtpUser;
-
-  if (smtpUser && smtpPass && smtpFrom) {
-    const transporter = nodemailer.createTransport({
-      host: smtpHost,
-      port: smtpPort,
-      secure: smtpSecure,
-      auth: {
-        user: smtpUser,
-        pass: smtpPass
-      }
-    });
-
-    try {
-      await transporter.sendMail({
-        from: smtpFrom,
-        to,
-        subject,
-        html
-      });
-    } catch (error) {
-      const message = String(error?.message || "");
-
-      if (
-        message.includes("535-5.7.8")
-        || message.includes("BadCredentials")
-        || message.includes("Username and Password not accepted")
-      ) {
-        throw new Error(
-          "Gmail rejected the login. Turn on 2-Step Verification for the Gmail account and set SMTP_PASS to a Google App Password, not the normal Gmail password."
-        );
-      }
-
-      throw error;
-    }
-    return;
-  }
-
   const apiKey = process.env.RESEND_API_KEY;
-  const resendFrom = process.env.OTP_FROM_EMAIL;
+  const from = process.env.EMAIL_FROM;
 
-  if (!apiKey || !resendFrom) {
-    throw new Error("Email verification is not configured yet. Add Gmail SMTP env vars or RESEND_API_KEY and OTP_FROM_EMAIL.");
+  if (!apiKey || !from) {
+    throw new Error("Email is not configured yet. Set RESEND_API_KEY and EMAIL_FROM.");
   }
 
-  const response = await fetch(RESEND_API_URL, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      from: resendFrom,
-      to: [to],
-      subject,
-      html
-    })
-  });
+  const resend = new Resend(apiKey);
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Unable to send verification code. ${errorText || "Please try again."}`);
+  try {
+    const { error } = await resend.emails.send({ from, to, subject, html });
+    if (error) {
+      console.error("Resend send error:", error?.name, error?.message);
+      throw new Error("Unable to send email right now. Please try again.");
+    }
+  } catch (err) {
+    console.error("Resend send failed:", err?.message || err);
+    throw new Error("Unable to send email right now. Please try again.");
   }
 }
 
 async function sendVerificationCodeEmail({ to, code, paymentLink }) {
-  const subject = `${code} is your VeloxPay verification code`;
-  const html = `
-    <div style="font-family: Arial, sans-serif; max-width: 520px; margin: 0 auto; color: #0f172a;">
-      <p style="font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; color: #2563eb;">VeloxPay</p>
-      <h1 style="font-size: 24px; margin-bottom: 12px;">Confirm your payment</h1>
-      <p style="font-size: 15px; line-height: 1.6; color: #475569;">
-        Use this verification code to approve your payment of
-        <strong>${escapeHtml(paymentLink.amount)} ${escapeHtml(paymentLink.currency)}</strong>
-        to <strong>${escapeHtml(paymentLink.ownerName || paymentLink.username)}</strong>.
-      </p>
-      <div style="margin: 24px 0; padding: 18px 22px; border-radius: 16px; background: #eff6ff; font-size: 30px; font-weight: 700; letter-spacing: 0.28em; color: #1d4ed8; text-align: center;">
-        ${escapeHtml(code)}
-      </div>
-      <p style="font-size: 14px; line-height: 1.6; color: #64748b;">
-        This code expires in ${OTP_CODE_TTL_MINUTES} minutes. If you did not request this payment, you can ignore this email.
-      </p>
-    </div>
-  `;
+  const { subject, html } = otpEmail({
+    code,
+    expiresInMinutes: OTP_CODE_TTL_MINUTES,
+    headline: "Confirm your payment",
+    intro: `Use this code to approve your payment of ${escapeHtml(paymentLink.amount)} ${escapeHtml(paymentLink.currency)} to ${escapeHtml(paymentLink.ownerName || paymentLink.username)}.`
+  });
 
   await sendEmailMessage({ to, subject, html });
 }
 
 async function sendWalletLoginCodeEmail({ to, code, displayName }) {
-  const subject = `${code} is your VeloxPay login code`;
-  const html = `
-    <div style="font-family: Arial, sans-serif; max-width: 520px; margin: 0 auto; color: #0f172a;">
-      <p style="font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; color: #2563eb;">VeloxPay</p>
-      <h1 style="font-size: 24px; margin-bottom: 12px;">Confirm your wallet access</h1>
-      <p style="font-size: 15px; line-height: 1.6; color: #475569;">
-        Use this code to ${displayName ? "continue as " : "finish signing in to "}
-        <strong>${escapeHtml(displayName || normalizeEmail(to))}</strong>.
-      </p>
-      <div style="margin: 24px 0; padding: 18px 22px; border-radius: 16px; background: #eff6ff; font-size: 30px; font-weight: 700; letter-spacing: 0.28em; color: #1d4ed8; text-align: center;">
-        ${escapeHtml(code)}
-      </div>
-      <p style="font-size: 14px; line-height: 1.6; color: #64748b;">
-        This code expires in ${OTP_CODE_TTL_MINUTES} minutes. If this was not you, you can ignore this email.
-      </p>
-    </div>
-  `;
+  const { subject, html } = otpEmail({
+    code,
+    expiresInMinutes: OTP_CODE_TTL_MINUTES,
+    headline: "Confirm your wallet access",
+    intro: displayName
+      ? `Use this code to continue as ${escapeHtml(displayName)}.`
+      : "Use this code to finish signing in."
+  });
 
   await sendEmailMessage({ to, subject, html });
+}
+
+async function sendPaymentCompletionEmails(payment) {
+  if (payment.payerEmail) {
+    const receipt = paymentReceiptEmail({ payment });
+    await sendEmailMessage({ to: payment.payerEmail, subject: receipt.subject, html: receipt.html });
+  }
+  if (payment.ownerEmail) {
+    const notification = paymentNotificationEmail({ payment });
+    await sendEmailMessage({ to: payment.ownerEmail, subject: notification.subject, html: notification.html });
+  }
 }
 
 const allowedOrigins = (process.env.FRONTEND_ORIGIN || "http://localhost:5173,http://localhost:3000")
@@ -4594,6 +4536,10 @@ app.post("/smart-requests/:id/pay", async (req, res) => {
     }
     writeStore(store);
 
+    sendPaymentCompletionEmails(payment).catch((err) => {
+      console.error("Payment completion email error:", err?.message || err);
+    });
+
     res.json(mapSmartRequestCheckoutResponse(updated, {
       approval: mapCircleTransactionForPublic(result.data.approval?.transaction),
       payment: mapStoredPayment(payment),
@@ -5145,6 +5091,10 @@ app.post("/payment-links/:linkId/confirm-payment", async (req, res) => {
       timestamp: payment.paidAt
     });
     writeStore(store);
+
+    sendPaymentCompletionEmails(payment).catch((err) => {
+      console.error("Payment completion email error:", err?.message || err);
+    });
 
     res.json(mapStoredPayment(payment));
   } catch (err) {

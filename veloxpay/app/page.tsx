@@ -78,7 +78,7 @@ function ProductMockup() {
           <span className="h-3 w-3 rounded-full bg-slate-300" />
           <span className="h-3 w-3 rounded-full bg-slate-300" />
           <span className="ml-3 rounded-full bg-white px-3 py-1 text-xs font-medium text-ink-muted ring-1 ring-line">
-            veloxpay.vercel.app/dashboard
+            useveloxpay.xyz/dashboard
           </span>
         </div>
 
@@ -92,7 +92,7 @@ function ProductMockup() {
               </p>
             </div>
             <div className="rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-700">
-              Arc Testnet
+              Arc Network
             </div>
           </div>
 
@@ -151,7 +151,7 @@ export default function HomePage() {
                 </Link>
               </Button>
               <Button asChild variant="secondary">
-                <Link href="#smart-requests">View Demo</Link>
+                <Link href="#smart-requests">Explore Smart Requests</Link>
               </Button>
             </div>
           </div>
@@ -248,12 +248,12 @@ export default function HomePage() {
               Built on Arc infrastructure.
             </h2>
             <p className="mt-4 text-sm leading-6 text-ink-body">
-              VeloxPay uses Arc Testnet and Circle infrastructure to make stablecoin requests easier to create, fund, settle, and verify.
+              VeloxPay uses Arc and Circle infrastructure to make stablecoin requests easier to create, fund, settle, and verify.
             </p>
           </div>
           <div className="grid gap-4 md:grid-cols-3">
             {[
-              ["Arc Testnet", "Fast settlement for USDC and EURC test flows."],
+              ["Arc settlement", "Fast stablecoin settlement for USDC and EURC workflows."],
               ["Circle infrastructure", "Wallet and transaction rails for the app experience."],
               ["Programmable settlement", "Smart Request rules for splits, protection, and receipts."],
             ].map(([title, description]) => (
@@ -271,7 +271,7 @@ export default function HomePage() {
           Ready to simplify stablecoin payments?
         </h2>
         <p className="mx-auto mt-4 max-w-2xl text-sm leading-6 text-ink-body">
-          Launch VeloxPay to create a wallet, send a request, or test Smart Request settlement on Arc.
+          Launch VeloxPay to create a wallet, send a request, or manage Smart Request settlement on Arc.
         </p>
         <div className="mt-8">
           <Button asChild className="gap-2">

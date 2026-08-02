@@ -562,32 +562,34 @@ export function SmartRequestCheckout({
       {error ? <p className="rounded-2xl bg-rose-50 p-4 text-sm text-rose-700">{error}</p> : null}
 
       {(approval || paymentTransaction || receiptUrl) ? (
-        <div className="space-y-4 rounded-[24px] border border-slate-200/80 bg-white/90 p-5 text-sm shadow-[0_18px_45px_rgba(15,23,42,0.04)]">
+        <div className="overflow-hidden rounded-[24px] border border-slate-200/80 bg-white text-sm shadow-card">
           {completed ? (
-            <div className="flex items-start gap-3">
+            <div className="flex items-start gap-3 border-b border-line bg-gradient-to-br from-white via-white to-brand-50/40 p-5">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100">
                 <CheckCircle className="h-6 w-6" aria-hidden="true" />
               </div>
               <div>
-                <div className="font-semibold text-ink-heading">Payment completed</div>
+                <div className="text-lg font-semibold text-ink-heading">Payment completed</div>
                 <p className="mt-1 text-sm leading-6 text-ink-body">
                   The contract state was verified and the receipt is ready.
                 </p>
               </div>
             </div>
           ) : null}
-          {approval ? (
-            <TransactionLink label="Approval transaction" transaction={approval} />
-          ) : null}
-          {paymentTransaction ? (
-            <TransactionLink label="Payment transaction" transaction={paymentTransaction} />
-          ) : null}
-          {receiptUrl ? (
-            <a href={receiptUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-white shadow-button transition hover:bg-brand-hover">
-              <ReceiptText className="h-4 w-4" aria-hidden="true" />
-              View receipt
-            </a>
-          ) : null}
+          <div className="space-y-4 p-5">
+            {approval ? (
+              <TransactionLink label="Approval transaction" transaction={approval} />
+            ) : null}
+            {paymentTransaction ? (
+              <TransactionLink label="Payment transaction" transaction={paymentTransaction} />
+            ) : null}
+            {receiptUrl ? (
+              <a href={receiptUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-white shadow-button transition hover:-translate-y-0.5 hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-100">
+                <ReceiptText className="h-4 w-4" aria-hidden="true" />
+                View receipt
+              </a>
+            ) : null}
+          </div>
         </div>
       ) : null}
     </div>
@@ -616,7 +618,7 @@ function TransactionLink({
         <div className="mt-2 font-medium text-emerald-700">Network fee sponsored by VeloxPay</div>
       ) : null}
       {href ? (
-        <a href={href} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-2 font-semibold text-brand-700 hover:text-brand-hover">
+        <a href={href} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-2 font-semibold text-brand-700 transition hover:text-brand-hover focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-100">
           View on Arc Explorer
           <ExternalLink className="h-4 w-4" aria-hidden="true" />
         </a>

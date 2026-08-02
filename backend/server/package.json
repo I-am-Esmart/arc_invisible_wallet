@@ -19,6 +19,6 @@
     "dotenv": "^17.2.3",
     "ethers": "^6.16.0",
     "express": "^5.2.1",
-    "nodemailer": "^6.10.1"
+    "resend": "^4.0.0"
   }
 }

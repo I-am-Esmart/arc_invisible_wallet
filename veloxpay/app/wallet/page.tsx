@@ -52,11 +52,11 @@ export default function WalletPage() {
           <p className="vp-eyebrow">Wallet</p>
           <h1 className="mt-3 text-3xl font-semibold text-ink-heading">Your wallet in one place</h1>
           <p className="mt-3 max-w-2xl text-sm leading-6 text-ink-body">
-            Check balances, copy your address, fund with faucet tokens, and keep an eye on recent activity.
+            Check balances, copy your address, add funds, and keep an eye on recent activity.
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
-          <Button variant="secondary" onClick={() => setShowFaucet(true)}>Get faucet</Button>
+          <Button variant="secondary" onClick={() => setShowFaucet(true)}>Add funds</Button>
           <Button asChild variant="secondary">
             <Link href="/wallet/receive">Receive</Link>
           </Button>

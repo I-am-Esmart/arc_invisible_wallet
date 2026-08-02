@@ -69,8 +69,18 @@ Set:
 ```bash
 BACKEND_API_URL=<your-backend-url>
 NEXT_PUBLIC_BACKEND_API_URL=<your-backend-url>
-NEXT_PUBLIC_BUILDER_X_URL=<your-x-profile-url>
 ```
+
+Production domain:
+
+```bash
+https://www.useveloxpay.xyz
+```
+
+Visible social links:
+
+- VeloxPay on X: `https://x.com/UseVeloxPay`
+- Built by Smart: `https://x.com/cryptosmart121`
 
 ## Notes
 
