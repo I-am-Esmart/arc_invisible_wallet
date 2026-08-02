@@ -41,16 +41,18 @@ type RevealGroupProps = {
   children: ReactNode;
   className?: string;
   stagger?: number;
+  delayChildren?: number;
   once?: boolean;
   amount?: number;
 };
 
-function groupVariants(stagger: number): Variants {
+function groupVariants(stagger: number, delayChildren: number): Variants {
   return {
     hidden: {},
     visible: {
       transition: {
         staggerChildren: stagger,
+        delayChildren,
       },
     },
   };
@@ -60,6 +62,7 @@ export function RevealGroup({
   children,
   className,
   stagger = 0.1,
+  delayChildren = 0,
   once = true,
   amount = 0.2,
 }: RevealGroupProps) {
@@ -69,7 +72,7 @@ export function RevealGroup({
       initial="hidden"
       whileInView="visible"
       viewport={{ once, amount }}
-      variants={groupVariants(stagger)}
+      variants={groupVariants(stagger, delayChildren)}
     >
       {children}
     </motion.div>

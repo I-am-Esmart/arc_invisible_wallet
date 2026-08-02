@@ -60,7 +60,7 @@ const dotVariants: Variants = {
 export function ProductMockup() {
   return (
     <div style={{ perspective: 1200 }} className="relative">
-      <div className="absolute -left-8 top-12 hidden rounded-2xl border border-brand-100 bg-white p-4 shadow-card lg:block">
+      <div className="absolute -left-8 top-12 z-20 hidden rounded-2xl border border-brand-100 bg-white p-4 shadow-card lg:block">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-50 text-brand-700">
             <Lock className="h-5 w-5" aria-hidden="true" />
@@ -72,7 +72,7 @@ export function ProductMockup() {
         </div>
       </div>
 
-      <div className="absolute -right-5 bottom-10 hidden rounded-2xl border border-line bg-white p-4 shadow-card sm:block">
+      <div className="absolute -right-5 bottom-10 z-20 hidden rounded-2xl border border-line bg-white p-4 shadow-card sm:block">
         <div className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-muted">Settlement</div>
         <div className="mt-2 flex items-center gap-2 text-sm font-semibold text-emerald-700">
           <CheckCircle className="h-4 w-4" aria-hidden="true" />
@@ -86,7 +86,7 @@ export function ProductMockup() {
         viewport={{ once: true, amount: 0.4 }}
         variants={cardVariants}
         style={{ transformStyle: "preserve-3d" }}
-        className="overflow-hidden rounded-2xl border border-line bg-white shadow-[0_24px_80px_rgba(37,99,235,0.18)]"
+        className="relative z-0 overflow-hidden rounded-2xl border border-line bg-white shadow-[0_24px_80px_rgba(37,99,235,0.18)]"
       >
         <div className="flex items-center gap-2 border-b border-line bg-slate-50 px-4 py-3">
           <span className="h-3 w-3 rounded-full bg-slate-300" />
@@ -126,10 +126,10 @@ export function ProductMockup() {
               >
                 <span className="font-semibold text-ink-heading">{row.name}</span>
                 <span className="text-ink-muted">
-                  <CountUp value={row.percent} duration={0.7} suffix="%" />
+                  <CountUp value={row.percent} duration={1.4} suffix="%" />
                 </span>
                 <span className="font-semibold text-ink-heading">
-                  <CountUp value={row.amount} duration={0.9} suffix=" USDC" />
+                  <CountUp value={row.amount} duration={1.8} suffix=" USDC" />
                 </span>
               </motion.div>
             ))}

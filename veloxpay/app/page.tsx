@@ -8,6 +8,7 @@ import { HowItWorksSteps } from "@/components/marketing/how-it-works";
 import { FeatureCards } from "@/components/marketing/feature-cards";
 import { CtaButton } from "@/components/marketing/cta-button";
 import { Reveal, RevealGroup, RevealItem } from "@/components/motion/reveal";
+import { AnimatedHeadline } from "@/components/motion/animated-headline";
 
 const outcomes = [
   ["Standard payments", "Simple checkout for direct stablecoin requests."],
@@ -27,12 +28,11 @@ export default function HomePage() {
               <VeloxPayLogo className="h-14 w-14" />
               <p className="vp-eyebrow">Programmable money on Arc</p>
             </div>
-            <RevealGroup stagger={0.1}>
-              <RevealItem y={20} duration={0.4}>
-                <h1 className="mt-7 max-w-3xl text-4xl font-semibold leading-tight tracking-tight text-ink-heading sm:text-6xl">
-                  Programmable stablecoin payments for global teams.
-                </h1>
-              </RevealItem>
+            <AnimatedHeadline
+              text="Programmable stablecoin payments for global teams."
+              className="mt-7 max-w-3xl text-4xl font-semibold leading-tight tracking-tight text-ink-heading sm:text-6xl"
+            />
+            <RevealGroup stagger={0.1} delayChildren={0.55}>
               <RevealItem y={20} duration={0.4}>
                 <p className="mt-6 max-w-2xl text-lg leading-8 text-ink-body">
                   Create payment requests. Split payments automatically. Protect funds until work is approved.
