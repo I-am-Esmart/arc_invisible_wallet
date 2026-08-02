@@ -46,7 +46,7 @@ export function SplitFlowDiagram() {
             strokeLinecap="round"
             initial={{ pathLength: 0, opacity: 0 }}
             whileInView={{ pathLength: 1, opacity: 1 }}
-            viewport={{ once: true, amount: 0.5 }}
+            viewport={{ once: false, amount: 0.5 }}
             transition={{ duration: 0.7, ease: EASE_OUT, delay: index * 0.12 }}
           />
         ))}
@@ -60,7 +60,7 @@ export function SplitFlowDiagram() {
               opacity: [0, 1, 1, 0],
               offsetDistance: ["0%", "0%", "100%", "100%"],
             }}
-            viewport={{ once: true, amount: 0.5 }}
+            viewport={{ once: false, amount: 0.5 }}
             transition={{
               duration: 1.8,
               ease: "linear",
@@ -76,7 +76,7 @@ export function SplitFlowDiagram() {
       <motion.div
         initial={{ opacity: 0, scale: 0.9 }}
         whileInView={{ opacity: 1, scale: 1 }}
-        viewport={{ once: true, amount: 0.6 }}
+        viewport={{ once: false, amount: 0.6 }}
         transition={{ duration: 0.4, ease: EASE_OUT }}
         className="absolute flex w-[132px] -translate-x-1/2 -translate-y-1/2 flex-col items-center rounded-2xl border border-brand-100 bg-white px-3 py-3 text-center shadow-card sm:w-[150px]"
         style={{ left: `${SOURCE.x}%`, top: `${SOURCE.y}%` }}
@@ -92,7 +92,7 @@ export function SplitFlowDiagram() {
           key={target.name}
           initial={{ opacity: 0, x: 16 }}
           whileInView={{ opacity: 1, x: 0 }}
-          viewport={{ once: true, amount: 0.6 }}
+          viewport={{ once: false, amount: 0.6 }}
           transition={{ duration: 0.4, ease: EASE_OUT, delay: 0.35 + index * 0.12 }}
           className="absolute w-[128px] -translate-y-1/2 rounded-xl border border-line bg-white px-3 py-2.5 shadow-sm sm:w-[144px]"
           style={{ left: `${TARGET_X}%`, top: `${target.y}%` }}

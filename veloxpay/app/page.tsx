@@ -7,8 +7,10 @@ import { SplitFlowDiagram } from "@/components/marketing/split-flow-diagram";
 import { HowItWorksSteps } from "@/components/marketing/how-it-works";
 import { FeatureCards } from "@/components/marketing/feature-cards";
 import { CtaButton } from "@/components/marketing/cta-button";
+import { SmoothScrollLink } from "@/components/marketing/smooth-scroll-link";
 import { Reveal, RevealGroup, RevealItem } from "@/components/motion/reveal";
 import { AnimatedHeadline } from "@/components/motion/animated-headline";
+import { ArrivalPulse } from "@/components/motion/arrival-pulse";
 
 const outcomes = [
   ["Standard payments", "Simple checkout for direct stablecoin requests."],
@@ -49,7 +51,7 @@ export default function HomePage() {
                     </Button>
                   </CtaButton>
                   <Button asChild variant="secondary">
-                    <Link href="#smart-requests">Explore Smart Requests</Link>
+                    <SmoothScrollLink href="#smart-requests">Explore Smart Requests</SmoothScrollLink>
                   </Button>
                 </div>
               </RevealItem>
@@ -86,7 +88,8 @@ export default function HomePage() {
         <HowItWorksSteps />
       </section>
 
-      <section id="smart-requests" className="grid gap-8 py-16 lg:grid-cols-[1fr_0.9fr] lg:items-center">
+      <section id="smart-requests" className="relative grid gap-8 py-16 lg:grid-cols-[1fr_0.9fr] lg:items-center">
+        <ArrivalPulse eventName="section-arrival:smart-requests" />
         <SplitFlowDiagram />
         <div>
           <Reveal>

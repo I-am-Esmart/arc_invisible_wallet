@@ -25,12 +25,17 @@ export function CountUp({
   className,
 }: CountUpProps) {
   const ref = useRef<HTMLSpanElement>(null);
-  const isInView = useInView(ref, { once: true, amount: 0.6 });
+  const isInView = useInView(ref, { once: false, amount: 0.6 });
   const shouldReduceMotion = useReducedMotion();
 
   useEffect(() => {
     const node = ref.current;
-    if (!node || !isInView) {
+    if (!node) {
+      return;
+    }
+
+    if (!isInView) {
+      node.textContent = `${prefix}0${suffix}`;
       return;
     }
 

@@ -21,7 +21,7 @@ export function Reveal({
   delay = 0,
   duration = 0.4,
   y = 20,
-  once = true,
+  once = false,
   amount = 0.3,
 }: RevealProps) {
   return (
@@ -63,7 +63,7 @@ export function RevealGroup({
   className,
   stagger = 0.1,
   delayChildren = 0,
-  once = true,
+  once = false,
   amount = 0.2,
 }: RevealGroupProps) {
   return (

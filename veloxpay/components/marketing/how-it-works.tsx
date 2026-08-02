@@ -23,7 +23,7 @@ export function HowItWorksSteps() {
           className="absolute inset-0 origin-left bg-brand-500"
           initial={{ scaleX: 0 }}
           whileInView={{ scaleX: 1 }}
-          viewport={{ once: true, amount: 0.5 }}
+          viewport={{ once: false, amount: 0.5 }}
           transition={{ duration: 0.5, ease: EASE_OUT }}
         />
       </div>
@@ -36,7 +36,7 @@ export function HowItWorksSteps() {
               key={step.title}
               initial={{ opacity: 0, y: 16 }}
               whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, amount: 0.5 }}
+              viewport={{ once: false, amount: 0.5 }}
               transition={{ duration: 0.3, ease: EASE_OUT, delay: index * 0.13 }}
               className="relative rounded-2xl border border-line bg-white p-5 shadow-sm transition duration-200 ease-out hover:-translate-y-1 hover:shadow-[0_14px_35px_rgba(15,23,42,0.07)]"
             >

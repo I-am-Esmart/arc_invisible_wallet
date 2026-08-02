@@ -49,7 +49,7 @@ export function FeatureCards() {
     <motion.div
       initial="hidden"
       whileInView="visible"
-      viewport={{ once: true, amount: 0.2 }}
+      viewport={{ once: false, amount: 0.2 }}
       variants={groupVariants}
       className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4"
     >
@@ -72,14 +72,14 @@ export function FeatureCards() {
                   className="absolute inset-0 rounded-xl border-2 border-brand-300"
                   initial={{ scale: 0.6, opacity: 0.7 }}
                   whileInView={{ scale: 1.5, opacity: 0 }}
-                  viewport={{ once: true, amount: 0.6 }}
+                  viewport={{ once: false, amount: 0.6 }}
                   transition={{ duration: 0.7, ease: EASE_OUT, delay: 0.15 }}
                 />
               ) : null}
               <motion.span
                 initial={isProtected ? { scale: 0.7, opacity: 0, rotate: -8 } : undefined}
                 whileInView={isProtected ? { scale: 1, opacity: 1, rotate: 0 } : undefined}
-                viewport={{ once: true, amount: 0.6 }}
+                viewport={{ once: false, amount: 0.6 }}
                 transition={{ duration: 0.35, ease: EASE_OUT }}
               >
                 <Icon className="h-5 w-5" aria-hidden="true" />

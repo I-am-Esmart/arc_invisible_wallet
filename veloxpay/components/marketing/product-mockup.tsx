@@ -83,7 +83,7 @@ export function ProductMockup() {
       <motion.div
         initial="hidden"
         whileInView="visible"
-        viewport={{ once: true, amount: 0.4 }}
+        viewport={{ once: false, amount: 0.4 }}
         variants={cardVariants}
         style={{ transformStyle: "preserve-3d" }}
         className="relative z-0 overflow-hidden rounded-2xl border border-line bg-white shadow-[0_24px_80px_rgba(37,99,235,0.18)]"
@@ -114,7 +114,7 @@ export function ProductMockup() {
           <motion.div
             initial="hidden"
             whileInView="visible"
-            viewport={{ once: true, amount: 0.4 }}
+            viewport={{ once: false, amount: 0.4 }}
             variants={rowGroupVariants}
             className="grid gap-3"
           >
@@ -138,7 +138,7 @@ export function ProductMockup() {
           <motion.div
             initial="hidden"
             whileInView="visible"
-            viewport={{ once: true, amount: 0.4 }}
+            viewport={{ once: false, amount: 0.4 }}
             variants={statusGroupVariants}
             className="grid gap-3 sm:grid-cols-3"
           >
