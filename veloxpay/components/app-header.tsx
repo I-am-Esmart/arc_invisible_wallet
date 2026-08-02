@@ -13,6 +13,7 @@ export function AppHeader() {
   const router = useRouter();
   const [walletUser, setWalletUser] = useState<WalletUser | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isCondensed, setIsCondensed] = useState(false);
 
   useEffect(() => {
     setWalletUser(getStoredWalletUser());
@@ -21,6 +22,16 @@ export function AppHeader() {
   useEffect(() => {
     setIsMobileMenuOpen(false);
   }, [pathname]);
+
+  useEffect(() => {
+    function handleScroll() {
+      setIsCondensed(window.scrollY > 24);
+    }
+
+    handleScroll();
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
   function handleLogout() {
     clearWalletUser();
@@ -48,12 +59,19 @@ export function AppHeader() {
 
   return (
     <>
-      <header className="mb-8 rounded-2xl border border-line bg-white/90 px-4 py-3 shadow-card backdrop-blur sm:px-5">
+      <header
+        className={`mb-8 rounded-2xl border border-line bg-white/90 shadow-card backdrop-blur transition-[padding] duration-300 ease-out ${
+          isCondensed ? "px-4 py-2 sm:px-5" : "px-4 py-3 sm:px-5"
+        }`}
+      >
         <div className="flex items-center justify-between gap-4">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-3">
               <Link href="/" className="inline-flex items-center gap-3">
-                <VeloxPayLogo className="h-10 w-10" showWordmark />
+                <VeloxPayLogo
+                  className={`transition-all duration-300 ease-out ${isCondensed ? "h-8 w-8" : "h-10 w-10"}`}
+                  showWordmark
+                />
               </Link>
               <span className="hidden rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-brand-700 sm:inline-flex">
                 Arc payments
