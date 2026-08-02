@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { Inter, Manrope } from "next/font/google";
+import { MotionConfig } from "framer-motion";
 import { AppFooter } from "@/components/app-footer";
 import { AppHeader } from "@/components/app-header";
 import "./globals.css";
@@ -41,13 +42,15 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${inter.variable} ${manrope.variable} font-sans`}>
-        <div className="min-h-screen">
-          <div className="mx-auto max-w-7xl px-4 py-5 sm:px-6 lg:px-8">
-            <AppHeader />
-            {children}
-            <AppFooter />
+        <MotionConfig reducedMotion="user">
+          <div className="min-h-screen">
+            <div className="mx-auto max-w-7xl px-4 py-5 sm:px-6 lg:px-8">
+              <AppHeader />
+              {children}
+              <AppFooter />
+            </div>
           </div>
-        </div>
+        </MotionConfig>
       </body>
     </html>
   );

@@ -3,7 +3,6 @@ import {
   ArrowRight,
   CheckCircle,
   Link2,
-  Lock,
   ReceiptText,
   Send,
   Shield,
@@ -12,6 +11,8 @@ import {
 } from "lucide-react";
 import { VeloxPayLogo } from "@/components/brand/veloxpay-logo";
 import { Button } from "@/components/ui/button";
+import { ProductMockup } from "@/components/marketing/product-mockup";
+import { SplitFlowDiagram } from "@/components/marketing/split-flow-diagram";
 
 const trustCards = [
   {
@@ -48,82 +49,6 @@ const outcomes = [
   ["Split payments", "Automatic recipient allocation from a single payer action."],
   ["Protected payments", "Contract-held funds released after delivery approval."],
 ];
-
-function ProductMockup() {
-  return (
-    <div className="relative animate-[fadeIn_500ms_ease-out]">
-      <div className="absolute -left-8 top-12 hidden rounded-2xl border border-brand-100 bg-white p-4 shadow-card lg:block">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-50 text-brand-700">
-            <Lock className="h-5 w-5" aria-hidden="true" />
-          </div>
-          <div>
-            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-muted">Protected</div>
-            <div className="text-sm font-semibold text-ink-heading">Funds held on Arc</div>
-          </div>
-        </div>
-      </div>
-
-      <div className="absolute -right-5 bottom-10 hidden rounded-2xl border border-line bg-white p-4 shadow-card sm:block">
-        <div className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-muted">Settlement</div>
-        <div className="mt-2 flex items-center gap-2 text-sm font-semibold text-emerald-700">
-          <CheckCircle className="h-4 w-4" aria-hidden="true" />
-          Verified receipt ready
-        </div>
-      </div>
-
-      <div className="overflow-hidden rounded-2xl border border-line bg-white shadow-[0_24px_80px_rgba(37,99,235,0.18)]">
-        <div className="flex items-center gap-2 border-b border-line bg-slate-50 px-4 py-3">
-          <span className="h-3 w-3 rounded-full bg-slate-300" />
-          <span className="h-3 w-3 rounded-full bg-slate-300" />
-          <span className="h-3 w-3 rounded-full bg-slate-300" />
-          <span className="ml-3 rounded-full bg-white px-3 py-1 text-xs font-medium text-ink-muted ring-1 ring-line">
-            useveloxpay.xyz/dashboard
-          </span>
-        </div>
-
-        <div className="grid gap-5 p-5 sm:p-6">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <div className="vp-eyebrow">Smart Request</div>
-              <div className="mt-3 text-3xl font-semibold tracking-tight text-ink-heading">1,000 USDC</div>
-              <p className="mt-2 max-w-sm text-sm leading-6 text-ink-body">
-                Website development milestone with protected release.
-              </p>
-            </div>
-            <div className="rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-700">
-              Arc Network
-            </div>
-          </div>
-
-          <div className="grid gap-3">
-            {[
-              ["Developer", "60%", "600 USDC"],
-              ["Designer", "20%", "200 USDC"],
-              ["Project manager", "10%", "100 USDC"],
-              ["Agency treasury", "10%", "100 USDC"],
-            ].map(([name, percent, amount]) => (
-              <div key={name} className="grid grid-cols-[1fr_auto_auto] gap-3 rounded-xl border border-line bg-slate-50 px-4 py-3 text-sm">
-                <span className="font-semibold text-ink-heading">{name}</span>
-                <span className="text-ink-muted">{percent}</span>
-                <span className="font-semibold text-ink-heading">{amount}</span>
-              </div>
-            ))}
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-3">
-            {["Funded", "Submitted", "Ready to release"].map((label) => (
-              <div key={label} className="rounded-xl border border-brand-100 bg-brand-50 p-3">
-                <div className="h-2 w-2 rounded-full bg-brand" />
-                <div className="mt-3 text-sm font-semibold text-brand-700">{label}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 export default function HomePage() {
   return (
@@ -215,7 +140,7 @@ export default function HomePage() {
       </section>
 
       <section id="smart-requests" className="grid gap-8 py-16 lg:grid-cols-[1fr_0.9fr] lg:items-center">
-        <ProductMockup />
+        <SplitFlowDiagram />
         <div>
           <p className="vp-eyebrow">Smart Requests</p>
           <h2 className="mt-4 text-4xl font-semibold tracking-tight text-ink-heading">
