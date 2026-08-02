@@ -13,6 +13,7 @@ import { VeloxPayLogo } from "@/components/brand/veloxpay-logo";
 import { Button } from "@/components/ui/button";
 import { ProductMockup } from "@/components/marketing/product-mockup";
 import { SplitFlowDiagram } from "@/components/marketing/split-flow-diagram";
+import { RevealGroup, RevealItem } from "@/components/motion/reveal";
 
 const trustCards = [
   {
@@ -62,23 +63,31 @@ export default function HomePage() {
               <VeloxPayLogo className="h-14 w-14" />
               <p className="vp-eyebrow">Programmable money on Arc</p>
             </div>
-            <h1 className="mt-7 max-w-3xl text-4xl font-semibold leading-tight tracking-tight text-ink-heading sm:text-6xl [animation:fadeIn_700ms_ease-out]">
-              Programmable stablecoin payments for global teams.
-            </h1>
-            <p className="mt-6 max-w-2xl text-lg leading-8 text-ink-body [animation:fadeIn_850ms_ease-out]">
-              Create payment requests. Split payments automatically. Protect funds until work is approved.
-            </p>
-            <div className="mt-8 flex flex-wrap gap-3 [animation:fadeIn_1000ms_ease-out]">
-              <Button asChild className="gap-2">
-                <Link href="/dashboard">
-                  Launch App
-                  <ArrowRight className="h-4 w-4" aria-hidden="true" />
-                </Link>
-              </Button>
-              <Button asChild variant="secondary">
-                <Link href="#smart-requests">Explore Smart Requests</Link>
-              </Button>
-            </div>
+            <RevealGroup stagger={0.1}>
+              <RevealItem y={20} duration={0.4}>
+                <h1 className="mt-7 max-w-3xl text-4xl font-semibold leading-tight tracking-tight text-ink-heading sm:text-6xl">
+                  Programmable stablecoin payments for global teams.
+                </h1>
+              </RevealItem>
+              <RevealItem y={20} duration={0.4}>
+                <p className="mt-6 max-w-2xl text-lg leading-8 text-ink-body">
+                  Create payment requests. Split payments automatically. Protect funds until work is approved.
+                </p>
+              </RevealItem>
+              <RevealItem y={20} duration={0.4}>
+                <div className="mt-8 flex flex-wrap gap-3">
+                  <Button asChild className="gap-2">
+                    <Link href="/dashboard">
+                      Launch App
+                      <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                    </Link>
+                  </Button>
+                  <Button asChild variant="secondary">
+                    <Link href="#smart-requests">Explore Smart Requests</Link>
+                  </Button>
+                </div>
+              </RevealItem>
+            </RevealGroup>
           </div>
 
           <ProductMockup />
