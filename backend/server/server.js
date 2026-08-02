@@ -3412,7 +3412,8 @@ app.post("/smart-requests", async (req, res) => {
 
     requireWalletSession(
       {
-        ...req,
+        headers: req.headers,
+        query: req.query,
         body: {
           ...req.body,
           walletSessionToken
