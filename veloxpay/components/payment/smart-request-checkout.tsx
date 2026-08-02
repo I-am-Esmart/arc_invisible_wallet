@@ -51,19 +51,45 @@ type PersistedCheckoutState = {
   phase: CheckoutPhase;
 };
 
-const PHASES: Array<{ id: CheckoutPhase; label: string }> = [
-  { id: "verifying_payer", label: "verifying payer" },
-  { id: "checking_balance", label: "checking balance" },
-  { id: "estimating_bridge", label: "estimating bridge" },
-  { id: "bridging_usdc", label: "bridging USDC" },
-  { id: "confirming_bridge", label: "confirming bridge" },
-  { id: "confirming_arc_balance", label: "confirming Arc balance" },
-  { id: "approving_token", label: "approving token" },
-  { id: "submitting_payment", label: "submitting payment" },
-  { id: "confirming_arc", label: "confirming on Arc" },
-  { id: "verifying_onchain", label: "verifying onchain request status" },
-  { id: "completed", label: "completed" },
+type DisplayStepId = "verify" | "balance" | "pay" | "confirm" | "done";
+
+const DISPLAY_STEPS: Array<{ id: DisplayStepId; label: string }> = [
+  { id: "verify", label: "Verifying you" },
+  { id: "balance", label: "Checking balance" },
+  { id: "pay", label: "Approving & paying" },
+  { id: "confirm", label: "Confirming on Arc" },
+  { id: "done", label: "Completed" },
 ];
+
+function displayStepForPhase(phase: CheckoutPhase): DisplayStepId {
+  switch (phase) {
+    case "checking_balance":
+    case "estimating_bridge":
+    case "bridging_usdc":
+    case "confirming_bridge":
+    case "confirming_arc_balance":
+      return "balance";
+    case "approving_token":
+    case "submitting_payment":
+      return "pay";
+    case "confirming_arc":
+    case "verifying_onchain":
+      return "confirm";
+    case "completed":
+      return "done";
+    case "verifying_payer":
+    case "idle":
+    case "code_sent":
+    case "error":
+    default:
+      return "verify";
+  }
+}
+
+function displayStepIndex(id: DisplayStepId) {
+  return DISPLAY_STEPS.findIndex((entry) => entry.id === id);
+}
+
 const SHOW_PRIMARY_BRIDGE_FLOW = false;
 
 function storageKey(smartRequestId: string) {
@@ -108,10 +134,6 @@ function txExplorerUrl(transaction?: SmartRequestTransaction | null) {
 
 function hasConfirmedGasSponsorship(transaction?: SmartRequestTransaction | null) {
   return Boolean(transaction?.gasSponsorship?.confirmed);
-}
-
-function phaseIndex(phase: CheckoutPhase) {
-  return PHASES.findIndex((entry) => entry.id === phase);
 }
 
 export function SmartRequestCheckout({
@@ -442,14 +464,16 @@ export function SmartRequestCheckout({
       <div className="rounded-[24px] border border-slate-200/80 bg-gradient-to-br from-white via-white to-brand-50/20 p-4 shadow-[0_18px_45px_rgba(15,23,42,0.04)]">
         <div className="text-sm font-semibold text-slate-900">Smart Request checkout</div>
         <div className="mt-3 grid gap-2">
-          {PHASES.map((entry) => {
-            const currentIndex = phaseIndex(phase);
-            const entryIndex = phaseIndex(entry.id);
-            const isDone = completed || (currentIndex > entryIndex && currentIndex >= 0);
-            const isCurrent = phase === entry.id;
+          {DISPLAY_STEPS.map((entry) => {
+            const started = phase !== "idle" && phase !== "code_sent";
+            const currentId = displayStepForPhase(phase);
+            const currentIndex = displayStepIndex(currentId);
+            const entryIndex = displayStepIndex(entry.id);
+            const isDone = completed || (started && currentIndex > entryIndex);
+            const isCurrent = started && currentId === entry.id;
             return (
               <div key={entry.id} className="flex items-center justify-between rounded-2xl border border-slate-200/80 bg-slate-50/80 px-3 py-2 text-sm shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]">
-                <span className="capitalize text-slate-700">{entry.label}</span>
+                <span className="text-slate-700">{entry.label}</span>
                 <span className={isDone ? "text-emerald-700" : isCurrent ? "text-brand-700" : "text-slate-400"}>
                   {isDone ? "done" : isCurrent ? "in progress" : "waiting"}
                 </span>

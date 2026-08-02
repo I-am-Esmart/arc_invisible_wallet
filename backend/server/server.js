@@ -1981,10 +1981,27 @@ async function resolveOwnerIdentity(store, { email, displayName } = {}) {
   });
 }
 
+async function withRpcRetry(fn, { attempts = 3, delayMs = 800 } = {}) {
+  let lastError;
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error;
+      if (attempt < attempts) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+    }
+  }
+
+  throw lastError;
+}
+
 async function fetchTokenBalance(address, token) {
   const tokenConfig = getTokenConfig(token);
   const tokenContract = getTokenContract(tokenConfig.symbol);
-  const rawBalance = await tokenContract.balanceOf(address);
+  const rawBalance = await withRpcRetry(() => tokenContract.balanceOf(address));
   const decimals = tokenConfig.decimals ?? await tokenContract.decimals();
 
   return {
@@ -2200,7 +2217,7 @@ function verifyPaymentChallengeForSmartRequest({ linkId, payerEmail, verificatio
 
 async function getSmartRequestPayerBalance(smartRequest, payerAddress) {
   const tokenContract = getTokenContract(smartRequest.currency);
-  const rawBalance = await tokenContract.balanceOf(payerAddress);
+  const rawBalance = await withRpcRetry(() => tokenContract.balanceOf(payerAddress));
   const tokenConfig = getTokenConfig(smartRequest.currency);
 
   return {
