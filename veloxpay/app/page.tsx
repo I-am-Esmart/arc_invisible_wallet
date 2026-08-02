@@ -1,41 +1,12 @@
 import Link from "next/link";
-import {
-  ArrowRight,
-  CheckCircle,
-  Link2,
-  ReceiptText,
-  Shield,
-  Users,
-} from "lucide-react";
+import { ArrowRight, CheckCircle } from "lucide-react";
 import { VeloxPayLogo } from "@/components/brand/veloxpay-logo";
 import { Button } from "@/components/ui/button";
 import { ProductMockup } from "@/components/marketing/product-mockup";
 import { SplitFlowDiagram } from "@/components/marketing/split-flow-diagram";
 import { HowItWorksSteps } from "@/components/marketing/how-it-works";
+import { FeatureCards } from "@/components/marketing/feature-cards";
 import { RevealGroup, RevealItem } from "@/components/motion/reveal";
-
-const trustCards = [
-  {
-    icon: Link2,
-    title: "Payment Links",
-    description: "Create clean checkout links for USDC and EURC requests in seconds.",
-  },
-  {
-    icon: Users,
-    title: "Smart Splits",
-    description: "Route one payment across collaborators, vendors, and treasury wallets.",
-  },
-  {
-    icon: Shield,
-    title: "Protected Payments",
-    description: "Hold funds until work is submitted, verified, and approved.",
-  },
-  {
-    icon: ReceiptText,
-    title: "Verified Receipts",
-    description: "Track settlement, metadata, recipients, and explorer links after payment.",
-  },
-];
 
 const outcomes = [
   ["Standard payments", "Simple checkout for direct stablecoin requests."],
@@ -93,20 +64,7 @@ export default function HomePage() {
             From a simple link to contract-aware settlement.
           </h2>
         </div>
-        <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {trustCards.map((card) => {
-            const Icon = card.icon;
-            return (
-              <div key={card.title} className="rounded-2xl border border-line bg-white p-6 shadow-card transition duration-200 ease-out hover:-translate-y-1 hover:shadow-[0_18px_45px_rgba(15,23,42,0.08)]">
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-brand-50 text-brand-700">
-                  <Icon className="h-5 w-5" aria-hidden="true" />
-                </div>
-                <h3 className="mt-5 text-lg font-semibold text-ink-heading">{card.title}</h3>
-                <p className="mt-2 text-sm leading-6 text-ink-body">{card.description}</p>
-              </div>
-            );
-          })}
-        </div>
+        <FeatureCards />
       </section>
 
       <section className="rounded-2xl border border-line bg-slate-50 p-6 sm:p-8">
