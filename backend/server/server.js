@@ -1805,6 +1805,142 @@ async function sendPaymentCompletionEmails(payment) {
   }
 }
 
+// Split (and multi-recipient) Smart Requests settle straight to each recipient's wallet on-chain,
+// but the payer-facing `payment` record above only ever carries the creator's email. Without this,
+// recipients never get a history row (their "Incoming payments" tab queries by their own email) or
+// an email, even though the funds already landed in their wallet.
+function buildSmartRequestRecipientPayments(smartRequest, basePayment) {
+  const recipients = Array.isArray(smartRequest.recipients) ? smartRequest.recipients : [];
+  const baseOwnerEmail = normalizeEmail(basePayment.ownerEmail);
+
+  return recipients
+    .filter((recipient) => recipient.email && normalizeEmail(recipient.email) !== baseOwnerEmail)
+    .map((recipient) => ({
+      id: crypto.randomUUID(),
+      linkId: basePayment.linkId,
+      linkLabel: basePayment.linkLabel,
+      ownerEmail: recipient.email,
+      amount: recipient.amount,
+      currency: basePayment.currency,
+      status: basePayment.status,
+      payerEmail: basePayment.payerEmail,
+      customerName: recipient.name || "",
+      recipientAddress: recipient.walletAddress,
+      transactionHash: basePayment.transactionHash,
+      explorerUrl: basePayment.explorerUrl,
+      memo: basePayment.memo,
+      memoReference: basePayment.memoReference,
+      memoMode: basePayment.memoMode,
+      receiptUrl: buildReceiptUrl(basePayment.id, recipient.email),
+      paidAt: basePayment.paidAt,
+      createdAt: basePayment.createdAt,
+      timeline: basePayment.timeline
+    }));
+}
+
+async function saveSmartRequestRecipientPayments(store, recipientPayments) {
+  for (const recipientPayment of recipientPayments) {
+    store.payments.unshift(recipientPayment);
+    await savePersistentPayment(recipientPayment);
+  }
+}
+
+async function sendSmartRequestRecipientEmails(recipientPayments) {
+  await Promise.allSettled(
+    recipientPayments.map(async (recipientPayment) => {
+      const notification = paymentNotificationEmail({ payment: recipientPayment });
+      await sendEmailMessage({ to: recipientPayment.ownerEmail, subject: notification.subject, html: notification.html });
+    })
+  );
+}
+
+async function hasExistingSmartRequestPayment(store, smartRequest) {
+  if (!smartRequest.paymentLinkId) {
+    return false;
+  }
+
+  if (store.payments.some((entry) => entry.linkId === smartRequest.paymentLinkId)) {
+    return true;
+  }
+
+  if (HAS_PERSISTENT_KV && smartRequest.creatorUserId) {
+    const persisted = await listPersistentPayments(smartRequest.creatorUserId);
+    return persisted.some((entry) => entry.linkId === smartRequest.paymentLinkId);
+  }
+
+  return false;
+}
+
+// Builds and persists the payment/receipt/notification records for a settled Smart Request.
+// Callers are expected to have already confirmed no record exists yet (see ensureSmartRequestPaymentRecorded).
+async function finalizeSmartRequestPayment(store, { smartRequest, updated, payerEmail, transaction }) {
+  const paymentId = crypto.randomUUID();
+  const completedAt = updated.updatedAt || new Date().toISOString();
+  const payment = {
+    id: paymentId,
+    linkId: smartRequest.paymentLinkId,
+    linkLabel: `Smart Request ${smartRequest.id}`,
+    ownerEmail: smartRequest.creatorUserId,
+    amount: smartRequest.amount,
+    currency: smartRequest.currency,
+    status: "completed",
+    payerEmail,
+    customerName: "",
+    recipientAddress: smartRequest.contractAddress,
+    transactionHash: transaction?.txHash || "",
+    explorerUrl: transaction?.explorerUrl || "",
+    memo: smartRequest.description || "",
+    memoReference: `veloxpay-smart-request:${smartRequest.id}:${paymentId}`,
+    memoMode: "smart-request",
+    receiptUrl: buildReceiptUrl(paymentId, smartRequest.creatorUserId),
+    paidAt: completedAt,
+    createdAt: completedAt,
+    timeline: [
+      createTimelineEvent("sent", "Smart Request created"),
+      createTimelineEvent("code_requested", "Payer verified", `Verified ${payerEmail}`),
+      createTimelineEvent("paid", "Smart Request payment verified on Arc", `${smartRequest.amount} ${smartRequest.currency}`)
+    ]
+  };
+
+  store.payments.unshift(payment);
+  await savePersistentPayment(payment);
+  // Protected requests only escrow funds at this point - recipients aren't paid until
+  // approve-release actually distributes the money, so don't notify them yet.
+  const recipientsAlreadyPaid = updated.mode !== "protected" || updated.offchainStatus === "settled";
+  const recipientPayments = recipientsAlreadyPaid ? buildSmartRequestRecipientPayments(updated, payment) : [];
+  await saveSmartRequestRecipientPayments(store, recipientPayments);
+
+  const paymentLink = await resolvePaymentLink(store, { linkId: smartRequest.paymentLinkId });
+  if (paymentLink) {
+    appendTimelineEvent(paymentLink, "paid", "Smart Request payment verified on Arc", `${smartRequest.amount} ${smartRequest.currency}`);
+    paymentLink.lastPaidAt = completedAt;
+    await syncStoredPaymentLink(store, paymentLink);
+  }
+
+  sendPaymentCompletionEmails(payment).catch((err) => {
+    console.error("Payment completion email error:", err?.message || err);
+  });
+  sendSmartRequestRecipientEmails(recipientPayments).catch((err) => {
+    console.error("Smart request recipient email error:", err?.message || err);
+  });
+
+  return payment;
+}
+
+// Entry point for every place that discovers a Smart Request already settled onchain: a fresh
+// payment, a retried payment that turns out to already be settled, or a resumed flow after a
+// dropped connection (eg. a serverless function timing out mid-poll on a long onchain wait).
+// Without this, a request can settle onchain successfully while the HTTP call that would have
+// recorded it never finishes - leaving the smart request "settled" with no payment record, no
+// receipt, and no emails ever sent.
+async function ensureSmartRequestPaymentRecorded(store, { smartRequest, updated, payerEmail, transaction }) {
+  if (await hasExistingSmartRequestPayment(store, updated)) {
+    return null;
+  }
+
+  return finalizeSmartRequestPayment(store, { smartRequest, updated, payerEmail, transaction });
+}
+
 const allowedOrigins = (process.env.FRONTEND_ORIGIN || "http://localhost:5173,http://localhost:3000")
   .split(",")
   .map((origin) => normalizeOrigin(origin.trim()))
@@ -4431,6 +4567,18 @@ app.post("/smart-requests/:id/pay", async (req, res) => {
     smartRequest = await refreshSmartRequestFromContract(store, smartRequest);
 
     if (isSmartRequestFundingComplete(smartRequest)) {
+      const recoveredPayment = await ensureSmartRequestPaymentRecorded(store, {
+        smartRequest,
+        updated: smartRequest,
+        payerEmail,
+        transaction: {
+          txHash: smartRequest.fundingTransactionHash,
+          explorerUrl: smartRequest.fundingTransactionHash ? buildExplorerUrl(smartRequest.fundingTransactionHash) : ""
+        }
+      });
+      if (recoveredPayment) {
+        writeStore(store);
+      }
       return res.json(mapSmartRequestCheckoutResponse(smartRequest, {
         completed: true,
         transaction: buildStoredSmartRequestTransaction({
@@ -4439,6 +4587,7 @@ app.post("/smart-requests/:id/pay", async (req, res) => {
           blockchain: smartRequest.chain
         }),
         onchainRequest: { status: smartRequest.onchainStatus },
+        payment: recoveredPayment ? mapStoredPayment(recoveredPayment) : undefined,
         message: "Smart Request payment is already verified on Arc."
       }));
     }
@@ -4467,6 +4616,18 @@ app.post("/smart-requests/:id/pay", async (req, res) => {
     if (!result.ok) {
       const refreshed = await refreshSmartRequestFromContract(store, smartRequest);
       if (isSmartRequestFundingComplete(refreshed)) {
+        const recoveredPayment = await ensureSmartRequestPaymentRecorded(store, {
+          smartRequest: refreshed,
+          updated: refreshed,
+          payerEmail,
+          transaction: {
+            txHash: refreshed.fundingTransactionHash,
+            explorerUrl: refreshed.fundingTransactionHash ? buildExplorerUrl(refreshed.fundingTransactionHash) : ""
+          }
+        });
+        if (recoveredPayment) {
+          writeStore(store);
+        }
         return res.json(mapSmartRequestCheckoutResponse(refreshed, {
           completed: true,
           transaction: buildStoredSmartRequestTransaction({
@@ -4475,6 +4636,7 @@ app.post("/smart-requests/:id/pay", async (req, res) => {
             blockchain: refreshed.chain
           }),
           onchainRequest: { status: refreshed.onchainStatus },
+          payment: recoveredPayment ? mapStoredPayment(recoveredPayment) : undefined,
           message: "Smart Request payment is already verified on Arc."
         }));
       }
@@ -4502,7 +4664,6 @@ app.post("/smart-requests/:id/pay", async (req, res) => {
 
     const verifiedRequest = result.data.request;
     const fundingTransaction = mapCircleTransactionForPublic(result.data.transaction);
-    const paymentId = crypto.randomUUID();
     const completedAt = new Date().toISOString();
     const updated = normalizeSmartRequest({
       ...smartRequest,
@@ -4517,50 +4678,19 @@ app.post("/smart-requests/:id/pay", async (req, res) => {
       error: null,
       recovery: null
     });
-    const payment = {
-      id: paymentId,
-      linkId: smartRequest.paymentLinkId,
-      linkLabel: `Smart Request ${smartRequest.id}`,
-      ownerEmail: smartRequest.creatorUserId,
-      amount: smartRequest.amount,
-      currency: smartRequest.currency,
-      status: "completed",
-      payerEmail,
-      customerName: "",
-      recipientAddress: smartRequest.contractAddress,
-      transactionHash: fundingTransaction?.txHash || "",
-      explorerUrl: fundingTransaction?.explorerUrl || "",
-      memo: smartRequest.description || "",
-      memoReference: `veloxpay-smart-request:${smartRequest.id}:${paymentId}`,
-      memoMode: "smart-request",
-      receiptUrl: buildReceiptUrl(paymentId, smartRequest.creatorUserId),
-      paidAt: completedAt,
-      createdAt: completedAt,
-      timeline: [
-        createTimelineEvent("sent", "Smart Request created"),
-        createTimelineEvent("code_requested", "Payer verified", `Verified ${payerEmail}`),
-        createTimelineEvent("paid", "Smart Request payment verified on Arc", `${smartRequest.amount} ${smartRequest.currency}`)
-      ]
-    };
 
     await createSmartRequestRepo(store).save(updated);
-    store.payments.unshift(payment);
-    await savePersistentPayment(payment);
-    const paymentLink = await resolvePaymentLink(store, { linkId: smartRequest.paymentLinkId });
-    if (paymentLink) {
-      appendTimelineEvent(paymentLink, "paid", "Smart Request payment verified on Arc", `${smartRequest.amount} ${smartRequest.currency}`);
-      paymentLink.lastPaidAt = completedAt;
-      await syncStoredPaymentLink(store, paymentLink);
-    }
-    writeStore(store);
-
-    sendPaymentCompletionEmails(payment).catch((err) => {
-      console.error("Payment completion email error:", err?.message || err);
+    const payment = await ensureSmartRequestPaymentRecorded(store, {
+      smartRequest,
+      updated,
+      payerEmail,
+      transaction: fundingTransaction
     });
+    writeStore(store);
 
     res.json(mapSmartRequestCheckoutResponse(updated, {
       approval: mapCircleTransactionForPublic(result.data.approval?.transaction),
-      payment: mapStoredPayment(payment),
+      payment: payment ? mapStoredPayment(payment) : undefined,
       transaction: fundingTransaction,
       onchainRequest: verifiedRequest
     }));
@@ -4630,13 +4760,29 @@ app.post("/smart-requests/:id/resume", async (req, res) => {
     });
 
     await createSmartRequestRepo(store).save(updated);
+
+    const isCompleted = verified.data.status === expectedCompletedStatus;
+    let recoveredPayment = null;
+    if (isCompleted) {
+      recoveredPayment = await ensureSmartRequestPaymentRecorded(store, {
+        smartRequest,
+        updated,
+        payerEmail: payer.email,
+        transaction: {
+          txHash: updated.fundingTransactionHash,
+          explorerUrl: updated.fundingTransactionHash ? buildExplorerUrl(updated.fundingTransactionHash) : ""
+        }
+      });
+    }
+
     writeStore(store);
 
     res.json(mapSmartRequestCheckoutResponse(updated, {
       approval: mapCircleTransactionForPublic(approval?.data),
       transaction: mapCircleTransactionForPublic(paymentTransaction?.data),
       onchainRequest: verified.data,
-      completed: verified.data.status === expectedCompletedStatus
+      completed: isCompleted,
+      payment: recoveredPayment ? mapStoredPayment(recoveredPayment) : undefined
     }));
   } catch (err) {
     safeLogError("Smart request resume error:", err);
@@ -4817,14 +4963,26 @@ app.post("/smart-requests/:id/approve-release", async (req, res) => {
 
     await repository.save(updated);
     const payment = store.payments.find((entry) => entry.linkId === smartRequest.paymentLinkId);
+    let recipientPayments = [];
     if (payment) {
       payment.releaseTransactionHash = updated.releaseTransactionHash;
       payment.settledAt = updated.updatedAt;
       payment.timeline = payment.timeline || [];
       payment.timeline.push(createTimelineEvent("settled", "Protected payment released", updated.releaseTransactionHash || updated.releaseTransactionId));
       await savePersistentPayment(payment);
+
+      recipientPayments = buildSmartRequestRecipientPayments(updated, {
+        ...payment,
+        transactionHash: updated.releaseTransactionHash || payment.transactionHash,
+        explorerUrl: updated.releaseTransactionHash ? buildExplorerUrl(updated.releaseTransactionHash) : payment.explorerUrl
+      });
+      await saveSmartRequestRecipientPayments(store, recipientPayments);
     }
     writeStore(store);
+
+    sendSmartRequestRecipientEmails(recipientPayments).catch((err) => {
+      console.error("Smart request recipient email error:", err?.message || err);
+    });
 
     res.json({
       smartRequest: mapProtectedSmartRequestForUser(updated, actorEmail),
