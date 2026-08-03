@@ -303,9 +303,7 @@ function SmartRequestReceiptDetails({
           <Detail label="Token address" value={smartRequest.tokenAddress || "-"} mono />
           <Detail label="Current onchain status" value={smartRequest.onchainStatus || "-"} />
           <Detail label="Payer" value={smartRequest.actualPayerEmail || smartRequest.expectedPayerEmail || "-"} />
-          <Detail label="Payer wallet" value={smartRequest.actualPayerWalletAddress || "-"} mono />
           <Detail label="Creator" value={smartRequest.creatorUserId || "-"} />
-          <Detail label="Creator wallet" value={smartRequest.creatorWalletAddress || "-"} mono />
           <Detail label="Metadata hash" value={smartRequest.metadataHash || "-"} mono />
           <Detail label="Deliverable hash" value={smartRequest.deliverableHash || "-"} mono />
         </div>
