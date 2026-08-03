@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CheckCircle, Circle, ExternalLink, ReceiptText } from "lucide-react";
+import { VeloxPayLogo } from "@/components/brand/veloxpay-logo";
 import { Card } from "@/components/ui/card";
 import { ReceiptActions } from "@/components/payment/receipt-actions";
 import { LocalDateTime } from "@/components/shared/local-date-time";
@@ -52,6 +54,10 @@ export default async function ReceiptPage({ params, searchParams }: ReceiptPageP
 
   return (
     <main className="receipt-page mx-auto max-w-5xl space-y-6 print:max-w-none print:space-y-4">
+      <Link href="/" className="inline-flex w-fit items-center print:pointer-events-none">
+        <VeloxPayLogo className="h-9 w-9" showWordmark textClassName="text-lg font-semibold tracking-tight text-ink-heading" />
+      </Link>
+
       <section className="overflow-hidden rounded-[28px] border border-line bg-white shadow-[0_24px_80px_rgba(15,23,42,0.07)] print:rounded-none print:border-0 print:shadow-none">
         <div className="border-b border-line bg-gradient-to-br from-white via-white to-brand-50/50 p-6 sm:p-8">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
