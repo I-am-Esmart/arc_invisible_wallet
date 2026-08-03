@@ -1,7 +1,9 @@
+import type { ReactNode } from "react";
 import { notFound } from "next/navigation";
 import { CheckCircle, Circle, ExternalLink, ReceiptText } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { ReceiptActions } from "@/components/payment/receipt-actions";
+import { LocalDateTime } from "@/components/shared/local-date-time";
 import { getPaymentReceipt, listPayments } from "@/lib/api/payments";
 import { getSmartRequestByPaymentLinkId } from "@/lib/api/smart-requests";
 import {
@@ -10,7 +12,7 @@ import {
 } from "@/lib/smart-requests/receipt";
 import type { SmartRequest } from "@/lib/types/smart-request";
 import type { PaymentTimelineEvent } from "@/lib/types/payment-link";
-import { formatDate, formatMoney } from "@/lib/utils/format";
+import { formatMoney } from "@/lib/utils/format";
 
 type ReceiptPageProps = {
   params: Promise<{
@@ -77,7 +79,7 @@ export default async function ReceiptPage({ params, searchParams }: ReceiptPageP
 
         <div className="grid gap-4 p-6 sm:grid-cols-3 sm:p-8">
           <SummaryItem label="Receipt ID" value={payment.id} />
-          <SummaryItem label="Generated" value={formatDate(payment.paidAt || smartRequest?.updatedAt || smartRequest?.createdAt)} />
+          <SummaryItem label="Generated" value={<LocalDateTime value={payment.paidAt || smartRequest?.updatedAt || smartRequest?.createdAt} />} />
           <SummaryItem label="Payment mode" value={smartRequest?.mode || "standard"} />
         </div>
       </section>
@@ -188,7 +190,7 @@ export default async function ReceiptPage({ params, searchParams }: ReceiptPageP
   );
 }
 
-function SummaryItem({ label, value }: { label: string; value: string }) {
+function SummaryItem({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="rounded-2xl border border-line bg-slate-50 p-4">
       <div className="text-xs font-semibold uppercase tracking-[0.16em] text-ink-muted">{label}</div>
@@ -250,7 +252,7 @@ function ReceiptTimeline({
           </div>
           <div className="min-w-0 flex-1">
             <div className="text-sm font-semibold text-ink-heading">{item.label}</div>
-            <div className="mt-1 text-xs text-ink-muted">{formatDate(item.at)}</div>
+            <div className="mt-1 text-xs text-ink-muted"><LocalDateTime value={item.at} /></div>
           </div>
         </div>
       ))}
@@ -331,10 +333,10 @@ function SmartRequestReceiptDetails({
           {releaseOrRefundHash ? (
             <TransactionDetail label="Release or refund transaction" hash={releaseOrRefundHash} href={releaseOrRefundExplorerUrl} />
           ) : null}
-          <Detail label="Created" value={formatDate(verification.timestamps.created)} />
-          <Detail label="Funded" value={formatDate(verification.timestamps.funded)} />
-          <Detail label="Submitted" value={formatDate(verification.timestamps.submitted)} />
-          <Detail label="Settled" value={formatDate(verification.timestamps.settled)} />
+          <Detail label="Created" value={<LocalDateTime value={verification.timestamps.created} />} />
+          <Detail label="Funded" value={<LocalDateTime value={verification.timestamps.funded} />} />
+          <Detail label="Submitted" value={<LocalDateTime value={verification.timestamps.submitted} />} />
+          <Detail label="Settled" value={<LocalDateTime value={verification.timestamps.settled} />} />
         </div>
       </section>
     </div>
@@ -347,7 +349,7 @@ function Detail({
   mono = false,
 }: {
   label: string;
-  value: string;
+  value: ReactNode;
   mono?: boolean;
 }) {
   return (
