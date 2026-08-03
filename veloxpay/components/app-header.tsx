@@ -57,6 +57,10 @@ export function AppHeader() {
     [walletUser],
   );
 
+  if (pathname?.startsWith("/receipt")) {
+    return null;
+  }
+
   return (
     <>
       <header

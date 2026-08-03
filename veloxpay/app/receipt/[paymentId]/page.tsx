@@ -83,26 +83,27 @@ export default async function ReceiptPage({ params, searchParams }: ReceiptPageP
       </section>
 
       <Card className="print:rounded-none print:border-0 print:p-0 print:shadow-none">
-        <section>
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-ink-muted">Payment summary</p>
-              <h2 className="mt-1 text-xl font-semibold text-ink-heading">Settlement details</h2>
+        {!smartRequest ? (
+          <section>
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-ink-muted">Payment summary</p>
+                <h2 className="mt-1 text-xl font-semibold text-ink-heading">Settlement details</h2>
+              </div>
+              <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-100">
+                {payment.status || "completed"}
+              </span>
             </div>
-            <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-100">
-              {payment.status || smartRequest?.onchainStatus || "completed"}
-            </span>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          <SummaryItem label="From" value={fromLabel} />
-          <SummaryItem label="To" value={toLabel} />
-          <SummaryItem label="Amount" value={formatMoney(payment.amount, payment.currency)} />
-          <SummaryItem label="Network" value={network} />
-          <SummaryItem label="Status" value={payment.status || smartRequest?.onchainStatus || "-"} />
-          </div>
-        </section>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <SummaryItem label="From" value={fromLabel} />
+              <SummaryItem label="To" value={toLabel} />
+              <SummaryItem label="Network" value={network} />
+              <SummaryItem label="Status" value={payment.status || "-"} />
+            </div>
+          </section>
+        ) : null}
 
-        <section className="mt-8 grid gap-6 lg:grid-cols-[minmax(0,1fr)_0.9fr]">
+        <section className={`grid gap-6 lg:grid-cols-[minmax(0,1fr)_0.9fr] ${smartRequest ? "" : "mt-8"}`}>
           <div className="rounded-[24px] border border-line bg-slate-50/80 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-brand-700 ring-1 ring-line">
@@ -153,12 +154,7 @@ export default async function ReceiptPage({ params, searchParams }: ReceiptPageP
         </section>
 
         {smartRequest && verification ? (
-          <SmartRequestReceiptDetails
-            smartRequest={smartRequest}
-            paymentTransactionHash={payment.transactionHash || ""}
-            paymentExplorerUrl={payment.explorerUrl || ""}
-            verification={verification}
-          />
+          <SmartRequestReceiptDetails smartRequest={smartRequest} verification={verification} />
         ) : null}
       </Card>
 
@@ -264,16 +260,11 @@ function ReceiptTimeline({
 
 function SmartRequestReceiptDetails({
   smartRequest,
-  paymentTransactionHash,
-  paymentExplorerUrl,
   verification,
 }: {
   smartRequest: SmartRequest;
-  paymentTransactionHash: string;
-  paymentExplorerUrl: string;
   verification: NonNullable<ReturnType<typeof buildSmartRequestReceiptVerification>>;
 }) {
-  const fundingExplorerUrl = paymentExplorerUrl || explorerUrl(smartRequest.fundingTransactionHash || paymentTransactionHash);
   const releaseOrRefundHash = smartRequest.releaseTransactionHash || smartRequest.refundTransactionHash || "";
   const releaseOrRefundExplorerUrl = explorerUrl(releaseOrRefundHash);
 
@@ -335,10 +326,11 @@ function SmartRequestReceiptDetails({
       </section>
 
       <section className="avoid-break rounded-2xl border border-line bg-white p-5">
-        <h2 className="text-sm font-semibold text-ink-heading">Transactions and timestamps</h2>
+        <h2 className="text-sm font-semibold text-ink-heading">Timestamps</h2>
         <div className="mt-4 grid gap-4 text-sm text-ink-body sm:grid-cols-2">
-          <TransactionDetail label="Funding transaction" hash={smartRequest.fundingTransactionHash || paymentTransactionHash} href={fundingExplorerUrl} />
-          <TransactionDetail label="Release or refund transaction" hash={releaseOrRefundHash || "-"} href={releaseOrRefundExplorerUrl} />
+          {releaseOrRefundHash ? (
+            <TransactionDetail label="Release or refund transaction" hash={releaseOrRefundHash} href={releaseOrRefundExplorerUrl} />
+          ) : null}
           <Detail label="Created" value={formatDate(verification.timestamps.created)} />
           <Detail label="Funded" value={formatDate(verification.timestamps.funded)} />
           <Detail label="Submitted" value={formatDate(verification.timestamps.submitted)} />

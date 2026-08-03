@@ -59,7 +59,8 @@ function createSmartRequestContractService(context) {
     approveAndReleaseProtectedPayment: (input) => approveAndReleaseProtectedPayment(context, input),
     refundProtectedPayment: (input) => refundProtectedPayment(context, input),
     cancelOnchainSmartRequest: (input) => cancelOnchainSmartRequest(context, input),
-    waitForCircleTransaction: (input) => waitForCircleTransaction(context, input)
+    waitForCircleTransaction: (input) => waitForCircleTransaction(context, input),
+    findSmartRequestSettlementTransaction: (input) => safeContractCall(() => findSmartRequestSettlementTransaction(context, input))
   };
 }
 
@@ -467,9 +468,56 @@ async function getSmartRequestFromContractRaw(context, input) {
 
   const provider = requireProvider(context);
   const contract = new ethers.Contract(contractAddress, VELOXPAY_REQUESTS_ABI, provider);
-  const [request, recipients] = await Promise.all([contract.getRequest(requestId), contract.getRecipients(requestId)]);
 
-  return normalizeContractRequest({ request, recipients });
+  // Circle submits writes through its own relayer infra, while reads go through our own RPC
+  // node - the two can briefly disagree on the chain tip right after a request is created or
+  // settled. A bare "call exception" here (no decodable revert reason) almost always means the
+  // node just hasn't caught up yet, so retry a few times before giving up.
+  const maxAttempts = 3;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      const [request, recipients] = await Promise.all([contract.getRequest(requestId), contract.getRecipients(requestId)]);
+      return normalizeContractRequest({ request, recipients });
+    } catch (error) {
+      if (error?.code !== "CALL_EXCEPTION" || attempt === maxAttempts) {
+        if (error?.code === "CALL_EXCEPTION") {
+          throw new SmartRequestContractError(
+            "REQUEST_NOT_YET_VISIBLE",
+            "This Smart Request was just created or updated and is still confirming on Arc. Please try again in a few seconds.",
+            { retryable: true }
+          );
+        }
+        throw error;
+      }
+      await sleep(1500 * attempt);
+    }
+  }
+}
+
+// Recovery paths (eg. resuming after a dropped connection) sometimes only know that a request
+// settled onchain, not which Circle transaction did it. This looks up the actual settlement
+// event log so the real transaction hash can be shown instead of being left blank.
+async function findSmartRequestSettlementTransaction(context, { contractAddress, requestId, mode }) {
+  const provider = requireProvider(context);
+  const contract = new ethers.Contract(requireAddress(contractAddress, "Contract address"), VELOXPAY_REQUESTS_ABI, provider);
+  const normalizedRequestId = normalizeOnchainRequestId(requestId);
+  const eventName = mode === "protected" ? "RequestFunded" : "RequestSettled";
+  const filter = contract.filters[eventName](normalizedRequestId);
+  const latestBlock = await provider.getBlockNumber();
+
+  for (const lookbackBlocks of [5000, 100000]) {
+    try {
+      const logs = await contract.queryFilter(filter, Math.max(0, latestBlock - lookbackBlocks), latestBlock);
+      if (logs.length > 0) {
+        const mostRecent = logs[logs.length - 1];
+        return { txHash: mostRecent.transactionHash, blockNumber: mostRecent.blockNumber };
+      }
+    } catch {
+      // Try the wider window below, or fall through and report nothing found.
+    }
+  }
+
+  return null;
 }
 
 async function getTokenAllowanceRaw(context, { tokenAddress, ownerAddress, spenderAddress }) {

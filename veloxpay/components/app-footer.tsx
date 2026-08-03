@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { ExternalLink } from "lucide-react";
 
 const socialLinks = [
@@ -15,6 +18,12 @@ const socialLinks = [
 ];
 
 export function AppFooter() {
+  const pathname = usePathname();
+
+  if (pathname?.startsWith("/receipt")) {
+    return null;
+  }
+
   return (
     <footer className="mt-10 border-t border-line py-6">
       <div className="flex flex-col gap-4 text-sm text-ink-muted sm:flex-row sm:items-center sm:justify-between">

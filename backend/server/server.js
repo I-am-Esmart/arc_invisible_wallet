@@ -1917,12 +1917,19 @@ async function finalizeSmartRequestPayment(store, { smartRequest, updated, payer
     await syncStoredPaymentLink(store, paymentLink);
   }
 
-  sendPaymentCompletionEmails(payment).catch((err) => {
+  // Awaited (not fire-and-forget): Vercel can freeze/tear down a serverless function's
+  // execution as soon as the HTTP response is sent, which kills any still-pending background
+  // promises - a detached email send here would silently never complete.
+  try {
+    await sendPaymentCompletionEmails(payment);
+  } catch (err) {
     console.error("Payment completion email error:", err?.message || err);
-  });
-  sendSmartRequestRecipientEmails(recipientPayments).catch((err) => {
+  }
+  try {
+    await sendSmartRequestRecipientEmails(recipientPayments);
+  } catch (err) {
     console.error("Smart request recipient email error:", err?.message || err);
-  });
+  }
 
   return payment;
 }
@@ -2268,6 +2275,33 @@ function buildStoredSmartRequestTransaction({ id, txHash, blockchain = CIRCLE_BL
 function isSmartRequestFundingComplete(smartRequest) {
   const expectedStatus = smartRequest.mode === "protected" ? "funded" : "settled";
   return smartRequest.onchainStatus === expectedStatus;
+}
+
+// Recovery paths (eg. /resume, or /pay discovering a request already settled) sometimes only
+// know a request settled onchain - not which Circle transaction did it - because the read that
+// found "settled" came from a plain contract state check, not a Circle transaction response.
+// Without this, the payment record and receipt end up with a blank transaction hash instead of
+// the real onchain settlement transaction.
+async function resolveSmartRequestSettlementTransaction(smartRequest) {
+  if (smartRequest.fundingTransactionHash) {
+    return { txHash: smartRequest.fundingTransactionHash, explorerUrl: buildExplorerUrl(smartRequest.fundingTransactionHash) };
+  }
+
+  if (!smartRequest.onchainRequestId || !smartRequest.contractAddress) {
+    return { txHash: "", explorerUrl: "" };
+  }
+
+  const result = await getSmartRequestContractService().findSmartRequestSettlementTransaction({
+    contractAddress: smartRequest.contractAddress,
+    requestId: smartRequest.onchainRequestId,
+    mode: smartRequest.mode
+  });
+
+  if (!result.ok || !result.data?.txHash) {
+    return { txHash: "", explorerUrl: "" };
+  }
+
+  return { txHash: result.data.txHash, explorerUrl: buildExplorerUrl(result.data.txHash) };
 }
 
 function hasBridgeExecutionStarted(bridge) {
@@ -4567,14 +4601,15 @@ app.post("/smart-requests/:id/pay", async (req, res) => {
     smartRequest = await refreshSmartRequestFromContract(store, smartRequest);
 
     if (isSmartRequestFundingComplete(smartRequest)) {
+      const settlementTransaction = await resolveSmartRequestSettlementTransaction(smartRequest);
+      if (settlementTransaction.txHash && settlementTransaction.txHash !== smartRequest.fundingTransactionHash) {
+        smartRequest = await createSmartRequestRepo(store).save({ ...smartRequest, fundingTransactionHash: settlementTransaction.txHash });
+      }
       const recoveredPayment = await ensureSmartRequestPaymentRecorded(store, {
         smartRequest,
         updated: smartRequest,
         payerEmail,
-        transaction: {
-          txHash: smartRequest.fundingTransactionHash,
-          explorerUrl: smartRequest.fundingTransactionHash ? buildExplorerUrl(smartRequest.fundingTransactionHash) : ""
-        }
+        transaction: settlementTransaction
       });
       if (recoveredPayment) {
         writeStore(store);
@@ -4614,16 +4649,17 @@ app.post("/smart-requests/:id/pay", async (req, res) => {
     });
 
     if (!result.ok) {
-      const refreshed = await refreshSmartRequestFromContract(store, smartRequest);
+      let refreshed = await refreshSmartRequestFromContract(store, smartRequest);
       if (isSmartRequestFundingComplete(refreshed)) {
+        const settlementTransaction = await resolveSmartRequestSettlementTransaction(refreshed);
+        if (settlementTransaction.txHash && settlementTransaction.txHash !== refreshed.fundingTransactionHash) {
+          refreshed = await createSmartRequestRepo(store).save({ ...refreshed, fundingTransactionHash: settlementTransaction.txHash });
+        }
         const recoveredPayment = await ensureSmartRequestPaymentRecorded(store, {
           smartRequest: refreshed,
           updated: refreshed,
           payerEmail,
-          transaction: {
-            txHash: refreshed.fundingTransactionHash,
-            explorerUrl: refreshed.fundingTransactionHash ? buildExplorerUrl(refreshed.fundingTransactionHash) : ""
-          }
+          transaction: settlementTransaction
         });
         if (recoveredPayment) {
           writeStore(store);
@@ -4745,7 +4781,7 @@ app.post("/smart-requests/:id/resume", async (req, res) => {
     }
 
     const expectedCompletedStatus = smartRequest.mode === "protected" ? "funded" : "settled";
-    const updated = normalizeSmartRequest({
+    let updated = normalizeSmartRequest({
       ...smartRequest,
       actualPayerEmail: payer.email,
       actualPayerWalletId: payer.walletId,
@@ -4764,14 +4800,15 @@ app.post("/smart-requests/:id/resume", async (req, res) => {
     const isCompleted = verified.data.status === expectedCompletedStatus;
     let recoveredPayment = null;
     if (isCompleted) {
+      const settlementTransaction = await resolveSmartRequestSettlementTransaction(updated);
+      if (settlementTransaction.txHash && settlementTransaction.txHash !== updated.fundingTransactionHash) {
+        updated = await createSmartRequestRepo(store).save({ ...updated, fundingTransactionHash: settlementTransaction.txHash });
+      }
       recoveredPayment = await ensureSmartRequestPaymentRecorded(store, {
         smartRequest,
         updated,
         payerEmail: payer.email,
-        transaction: {
-          txHash: updated.fundingTransactionHash,
-          explorerUrl: updated.fundingTransactionHash ? buildExplorerUrl(updated.fundingTransactionHash) : ""
-        }
+        transaction: settlementTransaction
       });
     }
 
@@ -4980,9 +5017,11 @@ app.post("/smart-requests/:id/approve-release", async (req, res) => {
     }
     writeStore(store);
 
-    sendSmartRequestRecipientEmails(recipientPayments).catch((err) => {
+    try {
+      await sendSmartRequestRecipientEmails(recipientPayments);
+    } catch (err) {
       console.error("Smart request recipient email error:", err?.message || err);
-    });
+    }
 
     res.json({
       smartRequest: mapProtectedSmartRequestForUser(updated, actorEmail),
@@ -5268,9 +5307,11 @@ app.post("/payment-links/:linkId/confirm-payment", async (req, res) => {
     });
     writeStore(store);
 
-    sendPaymentCompletionEmails(payment).catch((err) => {
+    try {
+      await sendPaymentCompletionEmails(payment);
+    } catch (err) {
       console.error("Payment completion email error:", err?.message || err);
-    });
+    }
 
     res.json(mapStoredPayment(payment));
   } catch (err) {
